@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 0; // Inter-character timer unused
+    newtio.c_cc[VTIME] = 0.1; // Inter-character timer unused
     newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
@@ -119,22 +119,24 @@ int main(int argc, char *argv[])
 
     while ( alarmCount < 3)
     {
+        int bytes = read(fd,buf_read,BUF_SIZE);
+
+        if(buf_read[0] == FLAG && buf_read[4] == FLAG) {
+            for(int i = 0; i < 5; i++) {
+                printf("var = 0x%02X\n", buf_read[i]);
+            }
+            return 0;
+        }
+
         if (alarmEnabled == FALSE)
         {
+
             alarm(3); // Set alarm to be triggered in 3s
             alarmEnabled = TRUE;
-            int bytes = write(fd,buf,BUF_SIZE);
+            bytes = write(fd,buf,5);
             printf("sent bytes\n");
 
 
-            bytes = read(fd,buf_read,BUF_SIZE);
-            printf("read bytes\n");
-            if(buf_read[0] == FLAG && buf_read) {
-                for(int i = 0; i < 5; i++) {
-                    printf("var = 0x%02X\n", buf_read[i]);
-                }
-                return 0;
-            }
         }
     }
 
