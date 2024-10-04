@@ -27,6 +27,9 @@
 
 volatile int STOP = FALSE;
 
+
+int next_step(int state, unsigned char *buffer);
+
 int main(int argc, char *argv[])
 {
     // Program usage: Uses either COM1 or COM2
@@ -94,22 +97,46 @@ int main(int argc, char *argv[])
 
     // Loop for input
     unsigned char buf[BUF_SIZE + 1] = {0}; // +1: Save space for the final '\0' char
- 
+    int state = 0;
+
+
     // Returns after 5 chars have been input
-    int bytes = read(fd, buf, BUF_SIZE);
-    buf[bytes] = '\0'; // Set end of string to '\0', so we can printf
-    for(int i = 0; i < 5; i++) {
-        printf("var = 0x%02X\n", buf[i]);
+
+    while(1){
+        int bytes = read(fd, buf, BUF_SIZE);
+        printf("reading bytes...\n");
+
+
+        for(int i = 0; i < 5; i++) {
+            state = next_step(state,buf);
+            printf("current state:%d\n", state);
+        }
+
+        buf[bytes] = '\0'; // Set end of string to '\0', so we can printf
+        for(int i = 0; i < 5; i++) {
+            printf("var = 0x%02X\n", buf[i]);
+        }
+
+        buf[0] = FLAG;
+        buf[1] = A_READ;  
+        buf[2] = C_READ;
+        buf[3] = A_READ ^ C_READ;
+        buf[4] = FLAG;
+
+        if(state == 5){
+            bytes = write(fd, buf, BUF_SIZE);
+            printf("%d bytes written\n", bytes);
+            break;
+        }
+
+        state = 0;
     }
+        
+    
+    
+    
 
-    buf[0] = FLAG;
-    buf[1] = A_READ;
-    buf[2] = C_READ;
-    buf[3] = A_READ ^ C_READ;
-    buf[4] = FLAG;
-
-/*     bytes = write(fd, buf, BUF_SIZE);
-    printf("%d bytes written\n", bytes); */
+    
 
     // The while() cycle should be changed in order to respect the specifications
     // of the protocol indicated in the Lab guide
@@ -124,4 +151,41 @@ int main(int argc, char *argv[])
     close(fd);
 
     return 0;
+}
+
+
+#define START 0
+#define FLAG_RCV 1
+#define A_RCV 2
+#define C_RCV 3
+#define BCC_OK 4
+#define STOP 5
+
+#define A_WRITE 0x03
+
+int next_step(int state, unsigned char *buffer){
+    switch (state)
+    {
+    case START:
+        if(buffer[0] == FLAG) return FLAG_RCV;
+        return state;
+    case FLAG_RCV:
+        if(buffer[1] == FLAG) return state;
+        else if(buffer[1] == A_WRITE) return A_RCV;
+        return START;
+    case A_RCV:
+        if(buffer[2] == 3) return C_RCV;
+        else if(buffer[2] == FLAG) return FLAG_RCV;
+        return START;
+    case C_RCV:
+        if(buffer[3] == (buffer[1] ^ buffer[2])) return BCC_OK;
+        else if(buffer[3] == FLAG) return FLAG_RCV;
+        return START;
+    case BCC_OK:
+        if(buffer[4] == FLAG) return STOP;
+        return START;
+    default:
+        break;
+    }
+    return START;
 }
