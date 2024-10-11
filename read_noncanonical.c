@@ -28,7 +28,80 @@
 volatile int STOP = FALSE;
 
 
-int next_step(int state, unsigned char *buffer);
+#define START 0
+#define FLAG_RCV 1
+#define A_RCV 2
+#define C_RCV 3
+#define BCC_OK 4
+#define STOP 5
+
+#define DATA_RCV 5
+#define FINAL_FLAG_RCV 6
+#define STOP_2 7
+
+#define A_WRITE 0x03
+
+int next_step(int state, unsigned char *buffer){
+    switch (state)
+    {
+    case START:
+        if(buffer[0] == FLAG) return FLAG_RCV;
+        return state;
+    case FLAG_RCV:
+        if(buffer[1] == FLAG) return state;
+        else if(buffer[1] == A_WRITE) return A_RCV;
+        return START;
+    case A_RCV:
+        if(buffer[2] == 3) return C_RCV;
+        else if(buffer[2] == FLAG) return FLAG_RCV;
+        return START;
+    case C_RCV:
+        if(buffer[3] == (buffer[1] ^ buffer[2])) return BCC_OK;
+        else if(buffer[3] == FLAG) return FLAG_RCV;
+        return START;
+    case BCC_OK:
+        if(buffer[4] == FLAG) return STOP;
+        return START;
+    default:
+        break;
+    }
+    return START;
+}
+
+
+int next_step_stop_wait(int state, char byte, char bcc){
+    switch (state)
+    {
+    case START:
+        if(byte == FLAG) return FLAG_RCV;
+        return state;
+    case FLAG_RCV:
+        if(byte== FLAG) return state;
+        else if(byte == 0x03) return A_RCV;
+        return START;
+    case A_RCV:
+        if(byte == 0x03) return C_RCV;
+        else if(byte == FLAG) return FLAG_RCV;
+        return START;
+    case C_RCV:
+        if(byte == bcc) return BCC_OK;
+        else if(byte == FLAG) return FLAG_RCV;
+        return START;
+    case BCC_OK:
+        if(byte != FLAG) return DATA_RCV;
+        return START;
+    case DATA_RCV:
+        if(byte != FLAG) return DATA_RCV;
+        return FINAL_FLAG_RCV;
+    case FINAL_FLAG_RCV:
+        if(byte == bcc) return STOP_2;
+        return START;
+
+    default:
+        break;
+    }
+    return START;
+}
 
 int main(int argc, char *argv[])
 {
@@ -73,7 +146,7 @@ int main(int argc, char *argv[])
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 0; // Inter-character timer unused
+    newtio.c_cc[VTIME] = 0.1; // Inter-character timer unused
     newtio.c_cc[VMIN] = 5;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
@@ -98,7 +171,7 @@ int main(int argc, char *argv[])
     // Loop for input
     unsigned char buf[BUF_SIZE + 1] = {0}; // +1: Save space for the final '\0' char
     int state = 0;
-
+    int index = 0;
 
     // Returns after 5 chars have been input
 
@@ -106,30 +179,59 @@ int main(int argc, char *argv[])
         int bytes = read(fd, buf, BUF_SIZE);
         printf("reading bytes...\n");
 
+        char bcc1 = buf[1] ^ buf[2];
+        char bcc2 = 0x0;
 
-        for(int i = 0; i < 5; i++) {
-            state = next_step(state,buf);
-            printf("current state:%d\n", state);
-        }
-
-        buf[bytes] = '\0'; // Set end of string to '\0', so we can printf
-        for(int i = 0; i < 5; i++) {
+        for(int i = 0; i < 13; i++){
             printf("var = 0x%02X\n", buf[i]);
         }
 
-        buf[0] = FLAG;
-        buf[1] = A_READ;  
-        buf[2] = C_READ;
-        buf[3] = A_READ ^ C_READ;
-        buf[4] = FLAG;
+        while(state != STOP_2 && index < 13 ){
+            if(state == C_RCV){ 
+                state = next_step_stop_wait(state, buf[index], bcc1);
+                printf("here - ");
+            }
+            else if(state == DATA_RCV){
+                bcc2 = bcc2 ^ buf[index];
+                state = next_step_stop_wait(state, buf[index], 0x00);
+                printf("here2 | current bcc2 0x%02X - ", bcc2);
+            }
+            else if(state == FINAL_FLAG_RCV) {
+                state = next_step_stop_wait(state, buf[index - 1], bcc2);
+                printf("here3 - ");
+            }
+            else state = next_step_stop_wait(state, buf[index], 0x00);
 
-        if(state == 5){
-            bytes = write(fd, buf, BUF_SIZE);
-            printf("%d bytes written\n", bytes);
-            break;
+            printf("current state: %d\n", state);
+            printf("var = 0x%02X\n", buf[index]);
+            index++;
         }
 
-        state = 0;
+        // for(int i = 0; i < 5; i++) {
+        //     state = next_step(state,buf);
+        //     printf("current state:%d\n", state);
+        // }
+
+        // buf[bytes] = '\0'; // Set end of string to '\0', so we can printf
+        // for(int i = 0; i < index; i++) {
+        //     printf("var = 0x%02X\n", buf[i]);
+        // }
+
+        break;
+
+        // buf[0] = FLAG;
+        // buf[1] = A_READ;  
+        // buf[2] = C_READ;
+        // buf[3] = A_READ ^ C_READ;
+        // buf[4] = FLAG;
+
+        // if(state == 5){
+        //     bytes = write(fd, buf, BUF_SIZE);
+        //     printf("%d bytes written\n", bytes);
+        //     break;
+        // }
+
+        // state = 0;
     }
         
     
@@ -151,41 +253,4 @@ int main(int argc, char *argv[])
     close(fd);
 
     return 0;
-}
-
-
-#define START 0
-#define FLAG_RCV 1
-#define A_RCV 2
-#define C_RCV 3
-#define BCC_OK 4
-#define STOP 5
-
-#define A_WRITE 0x03
-
-int next_step(int state, unsigned char *buffer){
-    switch (state)
-    {
-    case START:
-        if(buffer[0] == FLAG) return FLAG_RCV;
-        return state;
-    case FLAG_RCV:
-        if(buffer[1] == FLAG) return state;
-        else if(buffer[1] == A_WRITE) return A_RCV;
-        return START;
-    case A_RCV:
-        if(buffer[2] == 3) return C_RCV;
-        else if(buffer[2] == FLAG) return FLAG_RCV;
-        return START;
-    case C_RCV:
-        if(buffer[3] == (buffer[1] ^ buffer[2])) return BCC_OK;
-        else if(buffer[3] == FLAG) return FLAG_RCV;
-        return START;
-    case BCC_OK:
-        if(buffer[4] == FLAG) return STOP;
-        return START;
-    default:
-        break;
-    }
-    return START;
 }

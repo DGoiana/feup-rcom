@@ -208,4 +208,3 @@ int next_step(int state, unsigned char *buffer){
     }
     return START;
 }
-
