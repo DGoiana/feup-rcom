@@ -27,7 +27,16 @@
 #define C_WRITE 0x03
 
 volatile int STOP = FALSE;
+
 int next_step(int state, unsigned char *buffer);
+
+void print_buffer(unsigned char *buf_read)
+{
+    for (int i = 0; buf_read[i] != '\0'; i++)
+    {
+        printf("var = 0x%02X\n", buf_read[i]);
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -74,7 +83,7 @@ int main(int argc, char *argv[])
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0.1; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
+    newtio.c_cc[VMIN] = 5;    // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -98,69 +107,73 @@ int main(int argc, char *argv[])
     // Create string to send
     unsigned char buf[BUF_SIZE] = {0};
     unsigned char buf_read[BUF_SIZE] = {0};
-
-/*     for (int i = 0; i < BUF_SIZE; i++)
-    {
-        buf[i] = 'a' + i % 26;
-    } */
-
+    unsigned char flag_checker[1 + 1] = {0};
+    unsigned char byte_checker[1 + 1] = {0};
 
     // In non-canonical mode, '\n' does not end the writing.
     // Test this condition by placing a '\n' in the middle of the buffer.
     // The whole buffer must be sent even with the '\n'.
-    buf[5] = '\n';
-
     int state = 0;
     int bytes = 0;
+    int flag = 0;
 
-    (void)signal(SIGALRM,alarmHandler);
+    buf[0] = FLAG;
+    buf[1] = A_WRITE;
+    buf[2] = C_WRITE;
+    buf[3] = A_WRITE ^ C_WRITE;
+    buf[4] = 0x01;
+    buf[5] = 0x02;
+    buf[6] = 0x00;
+    buf[7] = FLAG;
 
-    while ( alarmCount < 3)
+    while (alarmCount < 4)
     {
-        buf[0] = FLAG;
-        buf[1] = A_WRITE;
-        buf[2] = C_WRITE;
-        buf[3] = A_WRITE ^ C_WRITE;
-        buf[4] = FLAG;
 
         if (alarmEnabled == FALSE)
         {
-
             alarm(3); // Set alarm to be triggered in 3s
             alarmEnabled = TRUE;
-            bytes = write(fd,buf,5);
+            bytes = write(fd, buf, 8);
             printf("sent bytes\n");
-
-
         }
 
-        bytes = read(fd, buf_read, BUF_SIZE);
-        // printf("reading bytes...\n");
+        flag = read(fd, flag_checker, 1);
 
-        for(int i = 0; i < 5; i++) {
-            state = next_step(state,buf_read);
-        }
-
-        buf_read[bytes] = '\0'; // Set end of string to '\0', so we can printf
-
-
-        if(state == 5) {
-            for(int i = 0; i < 5; i++) {
-                printf("var = 0x%02X\n", buf_read[i]);
+        if (flag_checker[0] == FLAG)
+        {
+            buf_read[0] = FLAG;
+            for (int i = 1; i < 5; i++)
+            {
+                flag = read(fd, byte_checker, 1);
+                buf_read[i] = byte_checker[0];
+                // printf("var = 0x%02X\n", buf_read[i]);
             }
-            return 0;
+            for (int i = 0; i < 5; i++)
+            {
+                // print_buffer(buf_read);
+                state = next_step(state, buf_read);
+            }
+
+            buf_read[bytes] = '\0';
+
+            if (state == 5)
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    printf("var = 0x%02X\n", buf_read[i]);
+                }
+                return 0;
+            }
         }
 
         state = 0;
-
-
+        sleep(1);
     }
 
     printf("timed out\n");
 
     // Wait until all bytes have been written to the serial port
     sleep(1);
-
 
     // Restore the old port settings
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
@@ -174,7 +187,6 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-
 #define START 0
 #define FLAG_RCV 1
 #define A_RCV 2
@@ -182,26 +194,35 @@ int main(int argc, char *argv[])
 #define BCC_OK 4
 #define STOP 5
 
-int next_step(int state, unsigned char *buffer){
+int next_step(int state, unsigned char *buffer)
+{
     switch (state)
     {
     case START:
-        if(buffer[0] == FLAG) return FLAG_RCV;
+        if (buffer[0] == FLAG)
+            return FLAG_RCV;
         return state;
     case FLAG_RCV:
-        if(buffer[1] == FLAG) return state;
-        else if(buffer[1] == 0x01) return A_RCV;
+        if (buffer[1] == FLAG)
+            return state;
+        else if (buffer[1] == 0x01)
+            return A_RCV;
         return START;
     case A_RCV:
-        if(buffer[2] == 0x07) return C_RCV;
-        else if(buffer[2] == FLAG) return FLAG_RCV;
+        if (buffer[2] == 0x07)
+            return C_RCV;
+        else if (buffer[2] == FLAG)
+            return FLAG_RCV;
         return START;
     case C_RCV:
-        if(buffer[3] == (buffer[1] ^ buffer[2])) return BCC_OK;
-        else if(buffer[3] == FLAG) return FLAG_RCV;
+        if (buffer[3] == (buffer[1] ^ buffer[2]))
+            return BCC_OK;
+        else if (buffer[3] == FLAG)
+            return FLAG_RCV;
         return START;
     case BCC_OK:
-        if(buffer[4] == FLAG) return STOP;
+        if (buffer[4] == FLAG)
+            return STOP;
         return START;
     default:
         break;
