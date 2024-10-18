@@ -1,7 +1,7 @@
 #include "constants.h"
 #include "../../include/state_machines.h"
 
-int next_step(int state, unsigned char *buffer)
+int next_step(int state, unsigned char *buffer, bool is_receiver)
 {
     switch (state)
     {
@@ -12,11 +12,11 @@ int next_step(int state, unsigned char *buffer)
     case FLAG_RCV:
         if (buffer[1] == F_FLAG)
             return state;
-        else if (buffer[1] == A_RC)
+        else if (buffer[1] == is_receiver ? A_TX : A_RC)
             return A_RCV;
         return START;
     case A_RCV:
-        if (buffer[2] == C_UA)
+        if (buffer[2] == is_receiver ? C_SET : C_UA)
             return C_RCV;
         else if (buffer[2] == F_FLAG)
             return FLAG_RCV;
