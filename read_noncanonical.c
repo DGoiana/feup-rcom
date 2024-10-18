@@ -212,8 +212,8 @@ int main(int argc, char *argv[])
             index++;
         }
         printf("final state: %d\n", state);
-
-        /*if (state == STOP || state == RESEND)
+        
+        if (state == STOP || state == RESEND)
         {
             // create_response(buf, state, FALSE, FALSE, FALSE);
             buf[0] = F_FLAG;
@@ -226,7 +226,7 @@ int main(int argc, char *argv[])
             state = 0;
             break;
         }
-    */
+    
     }
 
     // The while() cycle should be changed in order to respect the specifications
