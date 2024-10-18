@@ -1,1 +1,0 @@
-int next_step(unsigned char *buffer_received);

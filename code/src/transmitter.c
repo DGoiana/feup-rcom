@@ -3,13 +3,15 @@
 #include <signal.h>
 #include <stdio.h>
 #include "constants.h"
-#include "link_layer.h"
+#include "../include/link_layer.h"
+#include "transmitter.h"
+#include "state_machines.h"
 
 int alarmEnabled = false;
 int alarmCount = 0;
 
-
-int createSET(unsigned char *set){
+int createSET(unsigned char *set)
+{
     set[0] = F_FLAG;
     set[1] = A_TX;
     set[2] = C_SET;
@@ -19,22 +21,23 @@ int createSET(unsigned char *set){
     return 0;
 }
 
-int sendWithTimeout(unsigned char *buffer_receive, unsigned char *buffer_send, int timeout, int fd, int *current_alarm_count){
+int sendWithTimeout(unsigned char *buffer_receive, unsigned char *buffer_send, int timeout, int fd, int *current_alarm_count)
+{
     (void)signal(SIGALRM, alarmHandler);
-
+    printf("here3");
     int bytes = 0;
     int flag = 0;
     unsigned char flag_checker[2] = {0};
     unsigned char byte_checker[2] = {0};
 
     if (!alarmEnabled)
-        {
-            alarm(timeout); // Set alarm to be triggered in 3s
-            alarmEnabled = true;
-            bytes = write(fd, buffer_send, BUF_SIZE);
-            printf("sent bytes\n");
-        }
-
+    {
+        alarm(timeout); // Set alarm to be triggered in 3s
+        alarmEnabled = true;
+        bytes = write(fd, buffer_send, BUF_SIZE);
+        printf("sent bytes\n");
+    }
+    printf("here4");
     flag = read(fd, flag_checker, 1);
 
     if (flag_checker[0] == F_FLAG)
@@ -48,21 +51,26 @@ int sendWithTimeout(unsigned char *buffer_receive, unsigned char *buffer_send, i
 
         return 0;
     }
-    *current_alarm_count = *current_alarm_count +1;
+    printf("here5");
+    *current_alarm_count = alarmCount;
+
     return 1;
 }
 
-void alarmHandler(int signal){
+void alarmHandler(int signal)
+{
     alarmEnabled = false;
     alarmCount++;
 }
 
-bool checkResponse(unsigned char *buffer_received){
-    
+bool checkResponse(unsigned char *buffer_received)
+{
+
     int state = 0;
-    
-    for(int i = 0; i < 5; i++){
-        state = next_step(state, buffer_received,false);
+
+    for (int i = 0; i < 5; i++)
+    {
+        state = next_step(state, buffer_received, false);
     }
 
     return state == 5;

@@ -1,7 +1,7 @@
 // Serial port interface implementation
 // DO NOT CHANGE THIS FILE
 
-#include "serial_port.h"
+#include "../include/serial_port.h"
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -27,6 +27,7 @@ int openSerialPort(const char *serialPort, int baudRate)
     fd = open(serialPort, oflags);
     if (fd < 0)
     {
+        printf("here3\n");
         perror(serialPort);
         return -1;
     }
@@ -34,6 +35,7 @@ int openSerialPort(const char *serialPort, int baudRate)
     // Save current port settings
     if (tcgetattr(fd, &oldtio) == -1)
     {
+        printf("here4\n");
         perror("tcgetattr");
         return -1;
     }
@@ -92,6 +94,7 @@ int openSerialPort(const char *serialPort, int baudRate)
     // Set new port settings
     if (tcsetattr(fd, TCSANOW, &newtio) == -1)
     {
+        printf("here5\n");
         perror("tcsetattr");
         close(fd);
         return -1;
@@ -101,6 +104,7 @@ int openSerialPort(const char *serialPort, int baudRate)
     oflags ^= O_NONBLOCK;
     if (fcntl(fd, F_SETFL, oflags) == -1)
     {
+        printf("here6\n");
         perror("fcntl");
         close(fd);
         return -1;

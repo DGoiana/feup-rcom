@@ -1,9 +1,12 @@
 // Link layer protocol implementation
 
-#include "link_layer.h"
-#include "serial_port.h"
-#include "helpers/constants.h"
-#include "../include/state_machines.h"
+#include "../include/link_layer.h"
+#include "../include/serial_port.h"
+#include "constants.h"
+#include "state_machines.h"
+#include "receiver.h"
+#include "transmitter.h"
+#include <stdio.h>
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -13,32 +16,40 @@
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
-
     int fd = openSerialPort(connectionParameters.serialPort,
-                       connectionParameters.baudRate);
+                            connectionParameters.baudRate);
 
-    if (fd < 0) return -1;
+    printf("he124re");
+    if (fd < 0)
+        return -1;
 
-    if(connectionParameters.role == LlTx){
-
+    printf("he124re");
+    if (connectionParameters.role == LlTx)
+    {
+        printf("here");
         unsigned char buffer_receive[BUF_SIZE] = {0};
         unsigned char buffer_send[5] = {0};
         int current_alarm_count = 0;
 
         createSET(buffer_send);
 
-        do{
-            sendWithTimeout(buffer_receive, buffer_send, connectionParameters.timeout, fd);
+        do
+        {
+            printf("here2");
+            sendWithTimeout(buffer_receive, buffer_send, connectionParameters.timeout, fd, &current_alarm_count);
         } while (!checkResponse(buffer_receive) && current_alarm_count < connectionParameters.nRetransmissions);
-        
-    } else {
-        
-        do {
-            receiveMessage(buffer);    
-        } while(!checkMessage(messa));
+    }
+    else
+    {
+        printf("her231e");
+        unsigned char buffer_receive[BUF_SIZE] = {0};
 
-        sendResponse();
+        do
+        {
+            receiveMessage(buffer_receive, fd);
+        } while (!checkMessage(buffer_receive));
 
+        sendResponse(fd);
     }
 
     return 1;

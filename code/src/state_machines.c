@@ -1,5 +1,5 @@
 #include "constants.h"
-#include "../../include/state_machines.h"
+#include "state_machines.h"
 
 int next_step(int state, unsigned char *buffer, bool is_receiver)
 {
