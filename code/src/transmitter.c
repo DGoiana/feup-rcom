@@ -6,6 +6,7 @@
 #include "../include/link_layer.h"
 #include "transmitter.h"
 #include "state_machines.h"
+#include "serial_port.h"
 
 int alarmEnabled = false;
 int alarmCount = 0;
@@ -24,7 +25,6 @@ int createSET(unsigned char *set)
 int sendWithTimeout(unsigned char *buffer_receive, unsigned char *buffer_send, int timeout, int fd, int *current_alarm_count)
 {
     (void)signal(SIGALRM, alarmHandler);
-    printf("here3");
     int bytes = 0;
     int flag = 0;
     unsigned char flag_checker[2] = {0};
@@ -37,21 +37,20 @@ int sendWithTimeout(unsigned char *buffer_receive, unsigned char *buffer_send, i
         bytes = write(fd, buffer_send, BUF_SIZE);
         printf("sent bytes\n");
     }
-    printf("here4");
-    flag = read(fd, flag_checker, 1);
+
+    readByteSerialPort(flag_checker);
 
     if (flag_checker[0] == F_FLAG)
     {
         buffer_receive[0] = F_FLAG;
         for (int i = 1; i < 5; i++)
         {
-            flag = read(fd, byte_checker, 1);
+            readByteSerialPort(byte_checker);
             buffer_receive[i] = byte_checker[0];
         }
 
         return 0;
     }
-    printf("here5");
     *current_alarm_count = alarmCount;
 
     return 1;
@@ -73,5 +72,5 @@ bool checkResponse(unsigned char *buffer_received)
         state = next_step(state, buffer_received, false);
     }
 
-    return state == 5;
+    return state == 7; // TODO: CHANGE THIS
 }

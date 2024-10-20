@@ -9,19 +9,29 @@
 
 int receiveMessage(unsigned char *buf, int fd)
 {
-    unsigned char read_buf[1 + 1] = {0};
+    unsigned char flag_checker[2] = {0};
+    unsigned char byte_checker[2] = {0};
     int state = 0;
     int index = 0;
     int current = 0;
     int bytes = 0;
 
-    while (current < BUF_SIZE)
-    {
-        bytes = read(fd, read_buf, 1);
-        buf[current] = read_buf[0];
-        current++;
-    }
 
+    readByteSerialPort(flag_checker);
+    printf("got 0x%02X\n",flag_checker[0]);
+
+    if (flag_checker[0] == F_FLAG)
+    {
+        printf("got flag\n");
+        buf[0] = F_FLAG;
+        for (int i = 1; i < 5; i++)
+        {
+            readByteSerialPort(byte_checker);
+            buf[i] = byte_checker[0];
+        }
+
+        return 0;
+    }
     return 0;
 }
 
@@ -36,7 +46,7 @@ bool checkMessage(unsigned char *buf)
         state = next_step(state, buf, true);
     }
 
-    return state == 5;
+    return state == 7; // TODO: CHANGE THIS
 }
 
 int sendResponse(int fd)

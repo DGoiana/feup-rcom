@@ -27,7 +27,6 @@ int openSerialPort(const char *serialPort, int baudRate)
     fd = open(serialPort, oflags);
     if (fd < 0)
     {
-        printf("here3\n");
         perror(serialPort);
         return -1;
     }
@@ -35,7 +34,6 @@ int openSerialPort(const char *serialPort, int baudRate)
     // Save current port settings
     if (tcgetattr(fd, &oldtio) == -1)
     {
-        printf("here4\n");
         perror("tcgetattr");
         return -1;
     }
@@ -87,14 +85,13 @@ int openSerialPort(const char *serialPort, int baudRate)
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0; // Block reading
-    newtio.c_cc[VMIN] = 1;  // Byte by byte
+    newtio.c_cc[VMIN] = 0;  // Byte by byte
 
     tcflush(fd, TCIOFLUSH);
 
     // Set new port settings
     if (tcsetattr(fd, TCSANOW, &newtio) == -1)
     {
-        printf("here5\n");
         perror("tcsetattr");
         close(fd);
         return -1;

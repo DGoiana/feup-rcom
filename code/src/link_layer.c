@@ -18,15 +18,11 @@ int llopen(LinkLayer connectionParameters)
 {
     int fd = openSerialPort(connectionParameters.serialPort,
                             connectionParameters.baudRate);
-
-    printf("he124re");
     if (fd < 0)
         return -1;
 
-    printf("he124re");
     if (connectionParameters.role == LlTx)
     {
-        printf("here");
         unsigned char buffer_receive[BUF_SIZE] = {0};
         unsigned char buffer_send[5] = {0};
         int current_alarm_count = 0;
@@ -35,21 +31,22 @@ int llopen(LinkLayer connectionParameters)
 
         do
         {
-            printf("here2");
             sendWithTimeout(buffer_receive, buffer_send, connectionParameters.timeout, fd, &current_alarm_count);
         } while (!checkResponse(buffer_receive) && current_alarm_count < connectionParameters.nRetransmissions);
+
     }
     else
     {
-        printf("her231e");
         unsigned char buffer_receive[BUF_SIZE] = {0};
 
         do
         {
             receiveMessage(buffer_receive, fd);
+            printf("read\n");
         } while (!checkMessage(buffer_receive));
 
-        sendResponse(fd);
+/*         sendResponse(fd);
+        printf("sent response\n"); */
     }
 
     return 1;
