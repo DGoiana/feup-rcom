@@ -1,3 +1,5 @@
+// TODO: CHANGE THIS (AVOID USING THE HEAP FOR THIS - IT WILL BRING PROBLEMS)
+#define BUF_SIZE 1024 
 
 /* F values */
 #define F_FLAG 0x7E
@@ -16,6 +18,8 @@
 #define C_REJ0 0x54
 #define C_REJ1 0x55
 #define C_DISC 0x0B
+#define C_FRAME0 0x01
+#define C_FRAME1 0x80
 
 #define BCC1(A, C) (A ^ C)
 
@@ -30,4 +34,4 @@
 #define STOP 7
 #define RESEND 8
 
-#define BUF_SIZE 256
+#define BCC2_CHECK 5

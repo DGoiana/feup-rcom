@@ -4,6 +4,7 @@
 #include "link_layer.h"
 #include <string.h>
 #include <stdio.h>
+#include "constants.h"
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
@@ -19,6 +20,15 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     linkLayer.nRetransmissions = nTries;
     linkLayer.timeout = timeout;
 
+
+    // CAREFUL WITH THE BUF_SIZE
+    unsigned char packet[BUF_SIZE] = {0};
+
     llopen(linkLayer);
+    if(linkLayer.role == LlTx) {
+        llwrite("casa da mãe joana",18);
+    } else {
+        llread(packet);
+    }
     llclose(0);
 };

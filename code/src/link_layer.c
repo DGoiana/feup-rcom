@@ -14,6 +14,8 @@ int alarmEnabled = false;
 int alarmCount = 0;
 LinkLayer cp;
 int file_descriptor = -1;
+bool frame_num = false;
+
 
 void alarmHandler(int signal)
 {
@@ -193,7 +195,6 @@ int llopen(LinkLayer connectionParameters)
                     case BCC_OK:
                         if (byte == F_FLAG) {
                             state =  STOP;
-                            printf("wtf\n");
                             break;
                         }
                         else {
@@ -221,8 +222,38 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    // TODO
+    // F  A  C  BCC1 D1 ... Dn BCC2 F
 
+    int i = 0;
+    unsigned char bcc2 = 0x00;
+    unsigned char send[BUF_SIZE + 1] = {0};
+
+    send[0] = F_FLAG;
+    send[1] = A_TX;
+    send[2] = frame_num ? C_FRAME1 : C_FRAME0;
+    send[3] = send[1] ^ send[2];
+    while(i < bufSize) {
+        send[i+4] = buf[i];
+        bcc2 = bcc2 ^ buf[i];
+        i++;
+    }
+    i = i+5;
+    send[i] = bcc2;
+    i++;
+    send[i] = F_FLAG;
+
+    // TODO: ALARM LOOP
+    int wbytes = write(file_descriptor,send,i);
+    printf("written bytes: %d\n",wbytes);
+    printf("sent message\n");
+    /*          
+        i = 0;
+        while(i < bufSize + 7) {
+            printf(" 0x%02x ",send[i]);
+            i++;
+        }
+        printf("\n"); 
+    */
     return 0;
 }
 
@@ -231,8 +262,92 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
-    // TODO
+    int i = 0;
+    int state = 0;
+    unsigned char byte = 0x00;
+    unsigned char bcc2 = 0x00;
+    unsigned char last = 0x00;
 
+    while(state != STOP) {
+        if (read(file_descriptor,&byte,1) > 0) {
+            switch (state)
+            {
+                printf("byte: 0x%02x\n",byte);
+                printf("current_state: %d\n",state);
+                case START:
+                    if (byte == F_FLAG) {
+                        state =  FLAG_RCV;
+                        break;
+                    }
+                    else {
+                        state =  state;
+                        break;
+                    }
+                case FLAG_RCV:
+                    if (byte == F_FLAG) {
+                        state =  state;
+                        break;
+                    }
+                    else if (byte == A_TX) {
+                        state =  A_RCV;
+                        break;
+                    }
+                    else {
+                        state =  START;
+                        break;
+                    }
+                case A_RCV:
+                    if (byte == C_FRAME0) { // TODO: FRAME1 OR FRAME0
+                        state =  C_RCV;
+                        break;
+                    }
+                    else if (byte == F_FLAG) {
+                        state =  FLAG_RCV;
+                        break;
+                    }
+                    else {
+                        state =  START;
+                        break;
+                    }
+                case C_RCV:
+                    if (byte == (A_TX ^ C_FRAME0)) { // TODO: FRAME1 OR FRAME0
+                        state =  BCC_OK;
+                        break;
+                    }
+                    else if (byte == F_FLAG) {
+                        state =  FLAG_RCV;
+                        break;
+                    }
+                    else {
+                        state =  START;
+                        break;
+                    }
+                case BCC_OK:
+                    if(byte != F_FLAG) {
+                        packet[i] = byte;
+                        bcc2 = bcc2 ^ byte;
+                        i++;
+                        break;
+                    } else {
+                        state = BCC2_CHECK;
+                        break;
+                    }
+                case BCC2_CHECK:
+                    printf("calculated bcc2: 0x%02x",bcc2);
+                    printf("bcc2 from tx: 0x%02x",last);
+                    if(last == bcc2) {
+                        state = STOP;
+                        // TODO: SEND REJ0 OR REJ1
+                    } else {
+                        state = START;
+                    }
+                default:
+                    break;
+            }
+            last = byte;
+        } 
+
+    }
     return 0;
 }
 
@@ -258,8 +373,6 @@ int llclose(int showStatistics)
             
             while(alarmEnabled == false && state != STOP) {
                 if (read(file_descriptor,&byte,1) > 0) {
-                    printf("var: 0x%02x\n",byte);
-                    printf("current state %d\n",state);
                     switch (state)
                     {
                         case START:
