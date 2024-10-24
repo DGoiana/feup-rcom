@@ -25,13 +25,18 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     llopen(linkLayer);
 
-    // if (linkLayer.role == LlTx)
-    // {
-    //     llwrite("casa da mãe joana", 18);
-    // }
-    // else
-    // {
-    //     llread(packet);
-    // }
-    // llclose(0);
+    if (linkLayer.role == LlTx)
+    {
+        llwrite("casa da mãe joana", 18);
+    }
+    else
+    {
+        llread(packet);
+        for (int i = 0; i < 19; i++)
+        {
+            printf("%c", packet[i]);
+        }
+        printf("\n");
+    }
+    llclose(0);
 };
