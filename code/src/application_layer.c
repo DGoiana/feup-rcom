@@ -35,6 +35,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     llopen(linkLayer);
 
     llwrite("a casa da mae joana", 18);
+    llread(packet);
+
 
     llclose(0);
 };

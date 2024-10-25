@@ -207,8 +207,10 @@ int llread(unsigned char *packet)
 
             if (state == BCC2_CHECK)
             {
-                bcc_checked = BCC(bcc2, last);
-
+                bcc_checked = bcc2 == last;
+                printf("bcc2: %d\n",bcc2);
+                printf("last: %d\n",last);
+                printf("bcc_checked :%d \n",bcc_checked);
                 if(bcc_checked == false){
                     sendMessage(A_TX, (frame_ns == 0 ? C_REJ0 : C_REJ1));
                     state = START;
@@ -218,15 +220,18 @@ int llread(unsigned char *packet)
             }
 
             state_machine_writes(&state, byte, bcc_checked);
-
-            if (state == BCC_OK)
-            {
-                packet[i] = byte;
-                bcc2 = BCC(bcc2, byte);
-                i++;
-                last = byte;
-            }
+                    bcc2 = 0;
         }
+
+        if (state == BCC_OK)
+        {
+            packet[i] = byte;
+            bcc2 = BCC(bcc2, byte);
+            i++;                
+            last = byte;
+        }
+
+        state_machine_writes(&state, byte, bcc_checked);
     }
     printf("received i-ns\n");
     sendMessage(A_TX, (frame_ns == 0 ? C_RR1 : C_RR0));
