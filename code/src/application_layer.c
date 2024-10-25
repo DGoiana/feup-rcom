@@ -8,7 +8,7 @@
 
 void buildControlPacket(unsigned char *buf, int start){
     buf[0] = start;
-        
+
 }
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
@@ -34,8 +34,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     llopen(linkLayer);
 
-
-
+    llwrite("a casa da mae joana", 18);
 
     llclose(0);
 };

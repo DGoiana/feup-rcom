@@ -19,6 +19,8 @@ int file_descriptor = -1;
 int frame_ns = 0;
 int frame_nr = 1;
 
+int counter = 0;
+
 void state_machine_sendSET(unsigned char byte, int *state, bool tx);
 void state_machine_control_packet(int *state, unsigned char byte);
 void state_machine_writes(int *state, unsigned char byte, bool bcc2_checked);
@@ -63,7 +65,7 @@ int sendData(const unsigned char *buf, int bufSize)
     }
 
     i = i + 5;
-    send[i] = 0x09;
+    send[i] = bcc2;
     i++;
     send[i] = F_FLAG;
 
@@ -207,16 +209,15 @@ int llread(unsigned char *packet)
             {
                 bcc_checked = BCC(bcc2, last);
 
-                if(!bcc_checked){
+                if(bcc_checked == false){
                     sendMessage(A_TX, (frame_ns == 0 ? C_REJ0 : C_REJ1));
                     state = START;
                     printf("sent error message\n");
+                    bcc2 = 0x00;
                 }
             }
 
             state_machine_writes(&state, byte, bcc_checked);
-
-
 
             if (state == BCC_OK)
             {
@@ -545,7 +546,6 @@ void state_machine_writes(int *state, unsigned char byte, bool bcc2_checked)
         if (bcc2_checked)
         {
             *state = STOP;
-            // TODO: SEND REJ0 OR REJ1
         }
         else
         {
