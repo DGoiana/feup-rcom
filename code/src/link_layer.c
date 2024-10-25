@@ -63,7 +63,7 @@ int sendData(const unsigned char *buf, int bufSize)
     }
 
     i = i + 5;
-    send[i] = bcc2;
+    send[i] = 0x09;
     i++;
     send[i] = F_FLAG;
 
@@ -80,13 +80,14 @@ int llopen(LinkLayer connectionParameters)
                                      connectionParameters.baudRate);
     int state = 0;
     unsigned char byte = 0x00;
+    int tries = cp.nRetransmissions;
     if (file_descriptor < 0)
         return -1;
 
     if (connectionParameters.role == LlTx)
     {
         (void)signal(SIGALRM, alarmHandler);
-        while (connectionParameters.nRetransmissions != 0 && state != STOP)
+        while (tries != 0 && state != STOP)
         {
 
             sendMessage(A_TX, C_SET);
@@ -99,7 +100,7 @@ int llopen(LinkLayer connectionParameters)
                 if (readByteSerialPort(&byte) > 0)
                     state_machine_sendSET(byte, &state, true);
             }
-            connectionParameters.nRetransmissions--;
+            tries--;
         }
         if (state != STOP)
         {
@@ -141,11 +142,11 @@ int llwrite(const unsigned char *buf, int bufSize)
     (void)signal(SIGALRM, alarmHandler);
 
     int state = 0;
-    int tries = 3;
+    int tries = cp.nRetransmissions;
 
     unsigned char byte = 0x00;
 
-    // send i-ns-0 and receive rr-nr-1
+    // send i-ns and receive rr-nr
     while (state != STOP && tries != 0)
     {
         sendData(buf, bufSize);
@@ -159,6 +160,13 @@ int llwrite(const unsigned char *buf, int bufSize)
         {
             if (readByteSerialPort(&byte) > 0)
                 state_machine_control_packet(&state, byte);
+
+            if(state == RESEND){
+                printf("resending I - ns0 without timeout\n");
+                state = START;
+                tries = cp.nRetransmissions + 1;
+                break;
+            }
         }
         tries--;
     }
@@ -198,9 +206,17 @@ int llread(unsigned char *packet)
             if (state == BCC2_CHECK)
             {
                 bcc_checked = BCC(bcc2, last);
+
+                if(!bcc_checked){
+                    sendMessage(A_TX, (frame_ns == 0 ? C_REJ0 : C_REJ1));
+                    state = START;
+                    printf("sent error message\n");
+                }
             }
 
             state_machine_writes(&state, byte, bcc_checked);
+
+
 
             if (state == BCC_OK)
             {
@@ -408,6 +424,10 @@ void state_machine_control_packet(int *state, unsigned char byte)
         else if (byte == F_FLAG)
         {
             *state = FLAG_RCV;
+            break;
+        }
+        else if (byte == (frame_nr == 0 ? C_REJ1 : C_REJ0)){
+            *state = RESEND;
             break;
         }
         else

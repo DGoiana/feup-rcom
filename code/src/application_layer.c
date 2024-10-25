@@ -6,9 +6,15 @@
 #include <stdio.h>
 #include "constants.h"
 
+void buildControlPacket(unsigned char *buf, int start){
+    buf[0] = start;
+        
+}
+
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
+    // Building connection parameters
     LinkLayerRole r = strcmp(role, "tx") == 0 ? LlTx : LlRx;
     LinkLayer linkLayer;
 
@@ -23,20 +29,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     // CAREFUL WITH THE BUF_SIZE
     unsigned char packet[BUF_SIZE] = {0};
 
+    FILE *ptr;
+    ptr = fopen(filename, "r");
+
     llopen(linkLayer);
 
-    if (linkLayer.role == LlTx)
-    {
-        llwrite("casa da mãe joana", 18);
-    }
-    else
-    {
-        llread(packet);
-        for (int i = 0; i < 19; i++)
-        {
-            printf("%c", packet[i]);
-        }
-        printf("\n");
-    }
+
+
+
     llclose(0);
 };
