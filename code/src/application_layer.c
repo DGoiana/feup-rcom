@@ -34,8 +34,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     llopen(linkLayer);
 
-    llwrite("a casa da mae joana", 18);
-    llread(packet);
+    if(r == LlTx) {
+        unsigned char buf[17] = {0x01,0x02,0x7E,0x05,0x06,0x7E,0x01,0x7E,0x7e,0x01,0xFF,0x44,0x00};
+        llwrite(buf, 17);
+    } else {
+        llread(packet);
+    }
 
 
     llclose(0);

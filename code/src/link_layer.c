@@ -55,25 +55,46 @@ int sendData(const unsigned char *buf, int bufSize)
     send[2] = frame_ns == 1 ? C_FRAME1 : C_FRAME0;
     send[3] = BCC(send[1], send[2]);
 
-    int i = 0;
+    int index_buf = 0;
+    int index_send = 4;
 
-    while (i < bufSize) // will this work?
+/*     int j = 0;
+    while(j < bufSize) {
+        printf("buf[i]: 0x%02X\n",buf[j]);
+        j++;
+    } */
+
+    while (index_send < bufSize + 4) // will this work?
     {
-        send[i + 4] = buf[i];
-        bcc2 = BCC(bcc2, buf[i]);
-        i++;
+        if(buf[index_buf] == F_FLAG) {
+            send[index_send] = 0x7D;
+            index_send++;
+            send[index_send] = 0x5E;
+        } else {
+            send[index_send] = buf[index_buf];
+        }
+        bcc2 = BCC(bcc2, buf[index_buf]);
+        index_buf++;
+        index_send++;
     }
 
-    i = i + 5;
-    send[i] = bcc2;
-    i++;
-    send[i] = F_FLAG;
+    index_send = index_send + 5;
+    send[index_send] = bcc2;
+    index_send++;
+    send[index_send] = F_FLAG;
 
-    int frame_0_bytes = writeBytesSerialPort(send, i);
+/*     int j = 0;
+    while(send[j] != 'A') {
+        printf("var: 0x%02x\n",send[j]);
+        j++;
+    }
+    printf("\n"); */
+
+    int frame_0_bytes = writeBytesSerialPort(send, index_send);
 }
 
 ////////////////////////////////////////////////
-// LLOPEN
+// LLOPENbyte
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
@@ -199,18 +220,17 @@ int llread(unsigned char *packet)
     unsigned char last = 0x00;
 
     bool bcc_checked = false;
+    bool temp_stuffed = false;
 
     while (state != STOP)
     {
         if (readByteSerialPort(&byte) > 0)
         {
-
+/*             printf("current_byte : 0x%02x\n",byte);
+            printf("current_state : %d\n",state); */
             if (state == BCC2_CHECK)
             {
                 bcc_checked = bcc2 == last;
-                printf("bcc2: %d\n",bcc2);
-                printf("last: %d\n",last);
-                printf("bcc_checked :%d \n",bcc_checked);
                 if(bcc_checked == false){
                     sendMessage(A_TX, (frame_ns == 0 ? C_REJ0 : C_REJ1));
                     state = START;
@@ -218,22 +238,52 @@ int llread(unsigned char *packet)
                     bcc2 = 0x00;
                 }
             }
+            bcc2 = 0;
+
+            if(state == DATA_STUFFED) {
+                temp_stuffed = true;
+            }
+            if(state == STUFFED_RECEIVED ) {
+                packet[i] = F_FLAG;
+                i++;
+                if(byte != ESC && byte != REPLACED) {
+                    packet[i] = byte;
+                    i++;
+                }
+                temp_stuffed = false;
+            }
+            if (state == BCC_OK && temp_stuffed == false && byte != ESC)
+            {
+                if (byte != ESC && byte != F_FLAG) {
+                    packet[i] = byte;
+                    i++;                
+                }
+                bcc2 = BCC(bcc2, byte);
+                last = byte;
+            }
+
+            if(state == BCC_OK && temp_stuffed) {
+                packet[i] = ESC;
+                i++;
+                packet[i] = byte;
+                i++;
+                temp_stuffed = false;
+            }
+
 
             state_machine_writes(&state, byte, bcc_checked);
-                    bcc2 = 0;
         }
-
-        if (state == BCC_OK)
-        {
-            packet[i] = byte;
-            bcc2 = BCC(bcc2, byte);
-            i++;                
-            last = byte;
-        }
-
-        state_machine_writes(&state, byte, bcc_checked);
     }
+    
+    packet[i] = '\0';
     printf("received i-ns\n");
+    int j = 0;
+    printf("received:");
+    while(packet[j] != '\0') {
+        printf(" 0x%02x ",packet[j]);
+        j++;
+    }
+    printf("\n");
     sendMessage(A_TX, (frame_ns == 0 ? C_RR1 : C_RR0));
     printf("sent rr-nr\n");
     return 0;
@@ -537,7 +587,11 @@ void state_machine_writes(int *state, unsigned char byte, bool bcc2_checked)
             break;
         }
     case BCC_OK:
-        if (byte != F_FLAG)
+        if (byte == ESC) {
+            *state = DATA_STUFFED;
+            break;
+        } 
+        else if (byte != F_FLAG)
         {
             *state = *state;
             break;
@@ -545,6 +599,22 @@ void state_machine_writes(int *state, unsigned char byte, bool bcc2_checked)
         else
         {
             *state = BCC2_CHECK;
+            break;
+        }
+    case DATA_STUFFED:
+        if(byte == REPLACED) {
+            *state = STUFFED_RECEIVED;
+            break;
+        } else {
+            *state = BCC_OK;
+            break;
+        }
+    case STUFFED_RECEIVED:
+        if (byte == ESC) {
+            *state == DATA_STUFFED;
+            break;
+        } else {
+            *state = BCC_OK;
             break;
         }
     case BCC2_CHECK:

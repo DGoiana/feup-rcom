@@ -10,6 +10,9 @@
 // Address field in frames that are commands sent by the Receiver or replies sent by the Transmitter
 #define A_RC 0x01
 
+#define ESC 0x07D
+#define REPLACED (F_FLAG ^ 0x20)
+
 /* C values */
 #define C_SET 0x03
 #define C_UA 0x07
@@ -30,8 +33,10 @@
 #define C_RCV 3
 #define BCC_OK 4
 #define DATA_RCV 5
-#define FINAL_FLAG_RCV 6
-#define STOP 7
-#define RESEND 8
+#define DATA_STUFFED 6
+#define STUFFED_RECEIVED 7
+#define FINAL_FLAG_RCV 8
+#define STOP 9
+#define RESEND 10
 
 #define BCC2_CHECK 5
