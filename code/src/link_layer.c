@@ -64,7 +64,7 @@ int sendData(const unsigned char *buf, int bufSize)
         j++;
     } */
 
-    while (index_send < bufSize + 4) // will this work?
+    while (index_send < bufSize + 6) // will this work?
     {
         if(buf[index_buf] == F_FLAG) {
             send[index_send] = 0x7D;
@@ -73,13 +73,14 @@ int sendData(const unsigned char *buf, int bufSize)
         } else {
             send[index_send] = buf[index_buf];
         }
+        int oldbcc2 = bcc2;
         bcc2 = BCC(bcc2, buf[index_buf]);
+/*         printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",oldbcc2,buf[index_buf],bcc2); */
         index_buf++;
         index_send++;
     }
-
-    index_send = index_send + 5;
     send[index_send] = bcc2;
+/*     send[index_send] = 0xFF; */
     index_send++;
     send[index_send] = F_FLAG;
 
@@ -231,63 +232,63 @@ int llread(unsigned char *packet)
         {
 /*             printf("current_byte : 0x%02x\n",byte);
             printf("current_state : %d\n",state); */
+            int oldbcc2 = bcc2;            
+
             if (state == BCC2_CHECK)
             {
-                bcc_checked = bcc2 == last;
+                printf("bcc2: 0x%02x\n",bcc2);
+                printf("last: 0x%02x\n",last);
+                packet[i-1] = 0x00;
+                bcc_checked = bcc2 == 0;
                 if(bcc_checked == false){
-
                     sendMessage(A_TX, (frame_ns == 0 ? C_REJ0 : C_REJ1));
                     state = START;
                     printf("sent error message\n");
                     bcc2 = 0x00;
                 }
+/*                 printf("data_packet:");
+                for(int i = 1; i < 1000; i++) {
+                    printf(" 1x%02x ",packet[i]);
+                }  */
             }
-            bcc2 = 0;
-
+/*             printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",bcc2,oldbcc2,byte); */
+            if(state == BCC_OK) {
+                if(byte != ESC && byte != F_FLAG) {
+                    packet[i] = byte; i++;
+                    bcc2 = BCC(bcc2,byte);
+/*                     printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",oldbcc2,byte,bcc2); */
+                    last = byte;
+                }
+            }
             if(state == DATA_STUFFED) {
-                temp_stuffed = true;
-            }
-            if(state == STUFFED_RECEIVED ) {
-                packet[i] = F_FLAG;
-                i++;
-                if(byte != ESC && byte != REPLACED) {
-                    packet[i] = byte;
-                    i++;
+                if(byte == REPLACED) {
+                    packet[i] = F_FLAG; i++;
+                    bcc2 = BCC(bcc2,F_FLAG);
+/*                     printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",oldbcc2,F_FLAG,bcc2); */
+                    last = F_FLAG;
+                } else if(byte == ESC) {
+                    packet[i] = ESC; i++;
+                    bcc2 = BCC(bcc2,ESC);
+                    last = ESC;
+                } else {
+                    packet[i] = ESC; i++;
+                    bcc2 = BCC(bcc2,ESC);
+/*                     printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",oldbcc2,ESC,bcc2); */
+                    packet[i] = byte; i++;
+                    oldbcc2 = bcc2;            
+                    bcc2 = BCC(bcc2,byte);
+/*                     printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",oldbcc2,byte,bcc2); */
+                    last = byte;
                 }
-                temp_stuffed = false;
             }
-            if (state == BCC_OK && temp_stuffed == false && byte != ESC)
-            {
-                if (byte != ESC && byte != F_FLAG) {
-                    packet[i] = byte;
-                    i++;                
-                }
-                bcc2 = BCC(bcc2, byte);
-                last = byte;
-            }
+            
 
-            if(state == BCC_OK && temp_stuffed) {
-                packet[i] = ESC;
-                i++;
-                packet[i] = byte;
-                i++;
-                temp_stuffed = false;
-            }
-
-               state_machine_writes(&state, byte, bcc_checked);
+            state_machine_writes(&state, byte, bcc_checked);
 
         }
     }
     
-    packet[i] = '\0';
     printf("received i-ns\n");
-    int j = 0;
-    printf("received:");
-    while(packet[j] != '\0') {
-        printf(" 0x%02x ",packet[j]);
-        j++;
-    }
-    printf("\n");
     sendMessage(A_TX, (frame_ns == 0 ? C_RR1 : C_RR0));
     printf("sent rr-nr\n");
     frame_ns = (frame_ns == 0 ? 1 : 0);
@@ -609,16 +610,8 @@ void state_machine_writes(int *state, unsigned char byte, bool bcc2_checked)
             break;
         }
     case DATA_STUFFED:
-        if(byte == REPLACED) {
-            *state = STUFFED_RECEIVED;
-            break;
-        } else {
-            *state = BCC_OK;
-            break;
-        }
-    case STUFFED_RECEIVED:
-        if (byte == ESC) {
-            *state == DATA_STUFFED;
+        if(byte == ESC) {
+            *state = *state;
             break;
         } else {
             *state = BCC_OK;
