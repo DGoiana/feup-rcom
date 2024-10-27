@@ -6,9 +6,44 @@
 #include <stdio.h>
 #include "constants.h"
 
-void buildControlPacket(unsigned char *buf, int start){
-    buf[0] = start;
+int sequence_number = 0;
 
+long int calculate_file_size(const char *filename)
+{
+    FILE *fp = fopen(filename, "r");
+    fseek(fp, 0L, SEEK_END);
+    long int res = ftell(fp);
+    fclose(fp);
+    return res;
+}
+
+void buildDataPacket(unsigned char *buf, int num_bytes_read, unsigned char *packet)
+{
+    if (sequence_number == 99)
+        sequence_number = 0;
+
+    int l1 = num_bytes_read / 256;
+    int l2 = num_bytes_read % 256;
+
+    buf[0] = 2;
+    buf[1] = sequence_number;
+    sequence_number++;
+    buf[2] = l1;
+    buf[3] = l2;
+    memcpy(buf + 4, packet, num_bytes_read);
+}
+
+void buildControlPacket(unsigned char *buf, int start, const char *filename, int *ctrl_packet_size)
+{
+    buf[0] = start;
+    buf[1] = 0;
+    buf[2] = calculate_file_size(filename);
+    buf[3] = 1;
+    for (int i = 0; i < strlen(filename); i++)
+    {
+        buf[i + 4] = filename[i];
+    }
+    *ctrl_packet_size = strlen(filename) + 4;
 }
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
@@ -27,20 +62,97 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     linkLayer.timeout = timeout;
 
     // CAREFUL WITH THE BUF_SIZE
-    unsigned char packet[BUF_SIZE] = {0};
-
-    FILE *ptr;
-    ptr = fopen(filename, "r");
-
     llopen(linkLayer);
+    // TODO: error handlingshed changes
 
-    if(r == LlTx) {
-        unsigned char buf[17] = {0x01,0x02,0x7E,0x05,0x06,0x7E,0x01,0x7E,0x7e,0x01,0xFF,0x44,0x00};
-        llwrite(buf, 17);
-    } else {
-        llread(packet);
+    if (linkLayer.role == LlTx)
+    {
+        int ctrl_packet_size = 0;
+
+        unsigned char initial_ctrl_packet[100] = {0};
+        buildControlPacket(initial_ctrl_packet, 1, filename, &ctrl_packet_size);
+        llwrite(initial_ctrl_packet, ctrl_packet_size);
+
+        printf("Start control packet sent!\n");
+        unsigned char part_penguin[1000] = {0};
+
+        FILE *ptr;
+        ptr = fopen(filename, "rb");
+        printf("File opened to read!\n");
+
+        int num_bytes_read;
+
+        while ((num_bytes_read = fread(part_penguin, sizeof(char), 1000, ptr)) > 0)
+        {
+            unsigned char data_packet[1004] = {0};
+            buildDataPacket(data_packet, num_bytes_read, part_penguin);
+            if (llwrite(data_packet, num_bytes_read + 4) != 0)
+            {
+                printf("File corrupted. Exiting\n");
+                return;
+            }
+            printf("Sent part of penguin!\n");
+        }
+
+        unsigned char final_ctrl_packet[100] = {0};
+        ctrl_packet_size = 0;
+
+        printf("sending final control packet...\n");
+        buildControlPacket(final_ctrl_packet, 3, filename, &ctrl_packet_size);
+        llwrite(final_ctrl_packet, ctrl_packet_size);
     }
+    else
+    {
+        // open file
+        FILE *ptr;
+        ptr = fopen(filename, "wb+");
 
+        // read initial control packet
+        unsigned char initial_ctrl_packet[100] = {0};
+
+        llread(initial_ctrl_packet);
+
+        if (initial_ctrl_packet[0] != 1)
+            return;
+
+        printf("Initial control packet received\n");
+
+        // TODO: check other control packet chars
+
+        unsigned char part_penguin[1004] = {0};
+        unsigned char to_write_penguin[1000] = {0};
+
+        printf("Trying to read penguin...\n");
+        llread(part_penguin);
+
+        while (1)
+        {
+            if (part_penguin[0] != 2)
+            {
+                printf("Not penguin by now. Skipping...\n");
+                break;
+            }
+
+            int size = part_penguin[2] * 256 + part_penguin[3];
+
+            memcpy(to_write_penguin, part_penguin + 4, size);
+
+            fwrite(to_write_penguin, 1, size, ptr);
+            printf("var = 0x%02X\n", ptr);
+            printf("Writing part of penguin...\n");
+
+            printf("Trying to read penguin...\n");
+            llread(part_penguin);
+        }
+
+        if (part_penguin[0] != 3)
+        {
+            printf("Control packet was not a finish one\n");
+            return;
+        }
+
+        printf("Received final control packet. Exiting...\n");
+    }
 
     llclose(0);
 };

@@ -184,7 +184,8 @@ int llwrite(const unsigned char *buf, int bufSize)
             if (readByteSerialPort(&byte) > 0)
                 state_machine_control_packet(&state, byte);
 
-            if(state == RESEND){
+            if (state == RESEND)
+            {
                 printf("resending I - ns0 without timeout\n");
                 state = START;
                 tries = cp.nRetransmissions + 1;
@@ -201,8 +202,10 @@ int llwrite(const unsigned char *buf, int bufSize)
     else
     {
         printf("received RR - nr1\n");
-        frame_ns = !frame_ns;
-        frame_nr = !frame_nr;
+        frame_ns = (frame_ns == 0 ? 1 : 0);
+        printf("changed ns to %d\n", frame_ns);
+        frame_nr = (frame_nr == 0 ? 1 : 0);
+        printf("changed nr to %d\n", frame_nr);
     }
     return 0;
 }
@@ -232,6 +235,7 @@ int llread(unsigned char *packet)
             {
                 bcc_checked = bcc2 == last;
                 if(bcc_checked == false){
+
                     sendMessage(A_TX, (frame_ns == 0 ? C_REJ0 : C_REJ1));
                     state = START;
                     printf("sent error message\n");
@@ -270,8 +274,8 @@ int llread(unsigned char *packet)
                 temp_stuffed = false;
             }
 
+               state_machine_writes(&state, byte, bcc_checked);
 
-            state_machine_writes(&state, byte, bcc_checked);
         }
     }
     
@@ -286,6 +290,8 @@ int llread(unsigned char *packet)
     printf("\n");
     sendMessage(A_TX, (frame_ns == 0 ? C_RR1 : C_RR0));
     printf("sent rr-nr\n");
+    frame_ns = (frame_ns == 0 ? 1 : 0);
+    frame_nr = (frame_nr == 0 ? 1 : 0);
     return 0;
 }
 
@@ -482,7 +488,8 @@ void state_machine_control_packet(int *state, unsigned char byte)
             *state = FLAG_RCV;
             break;
         }
-        else if (byte == (frame_nr == 0 ? C_REJ1 : C_REJ0)){
+        else if (byte == (frame_nr == 0 ? C_REJ1 : C_REJ0))
+        {
             *state = RESEND;
             break;
         }
