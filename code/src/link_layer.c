@@ -3,15 +3,13 @@
 #include "../include/link_layer.h"
 #include "../include/serial_port.h"
 #include "constants.h"
+#include "statistics.h"
+#include "state_machines.h"
 #include <stdio.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include <time.h>
-#include <sys/time.h>
 
-struct timeval start;
-struct timeval finish;
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -26,10 +24,6 @@ int frame_nr = 1;
 
 int counter = 0;
 
-void state_machine_sendSET(unsigned char byte, int *state, bool tx);
-void state_machine_control_packet(int *state, unsigned char byte);
-void state_machine_writes(int *state, unsigned char byte, bool bcc2_checked);
-void state_machine_close(int *state, unsigned char byte);
 
 void alarmHandler(int signal)
 {
@@ -104,7 +98,7 @@ int llopen(LinkLayer connectionParameters)
     if (file_descriptor < 0)
         return -1;
 
-    gettimeofday(&start, NULL);
+    stat_start_timer();
 
     if (connectionParameters.role == LlTx)
     {
@@ -189,7 +183,7 @@ int llwrite(const unsigned char *buf, int bufSize)
         {
             if (readByteSerialPort(&byte) > 0)
             {
-                state_machine_control_packet(&state, byte);
+                state_machine_control_packet(&state, byte,frame_nr);
                 printf("byte read\n");
             }
 
@@ -198,6 +192,7 @@ int llwrite(const unsigned char *buf, int bufSize)
                 printf("resending I - ns0 without timeout\n");
                 state = START;
                 tries = cp.nRetransmissions + 1;
+                //alarm(0);
                 break;
             }
         }
@@ -247,6 +242,7 @@ int llread(unsigned char *packet)
                 bcc_checked = bcc2 == 0;
                 if (bcc_checked == false)
                 {
+                    stat_add_bad_frame();
                     sendMessage(A_TX, (frame_ns == 0 ? C_REJ0 : C_REJ1));
                     state = START;
                     printf("sent error message\n");
@@ -293,12 +289,14 @@ int llread(unsigned char *packet)
                 }
             }
 
-            state_machine_writes(&state, byte, bcc_checked);
+            state_machine_writes(&state, byte, bcc_checked,frame_ns);
         }
     }
 
     printf("received i-ns\n");
     sendMessage(A_TX, (frame_ns == 0 ? C_RR1 : C_RR0));
+    stat_set_bits_received(i+5);
+    stat_add_good_frame;
     printf("sent rr-nr\n");
     frame_ns = (frame_ns == 0 ? 1 : 0);
     frame_nr = (frame_nr == 0 ? 1 : 0);
@@ -374,356 +372,22 @@ int llclose(int showStatistics)
         printf("closed\n");
     }
 
-    gettimeofday(&finish, NULL);
+    if(showStatistics) {
+        double time_taken = stat_get_time();
+        double fer = stat_get_fer();
+        double bad_frames = stat_get_bad_frames();
+        double good_frames = stat_get_good_frames();
+        double bit_rate = stat_get_bitrate(time_taken); 
 
-    printf("time elapsed: %f\n", (finish.tv_sec - start.tv_sec) + (finish.tv_usec - start.tv_usec) / 1000000.0);
+        printf("Statistics: \n");
+        printf("|- Transfer time: \n");
+        printf("|- Bit-rate: \n");
+        printf("|- FER: \n");
+        printf("|- Max frame Size: \n");
+        printf("|- Nº bad frames: \n");
+        printf("|- Nº good frames: \n");
+    }
 
     int clstat = closeSerialPort();
     return clstat;
-}
-
-void state_machine_sendSET(unsigned char byte, int *state, bool tx)
-{
-    switch (*state)
-    {
-    case START:
-        if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else
-        {
-            *state = *state;
-            break;
-        }
-    case FLAG_RCV:
-        if (byte == F_FLAG)
-        {
-            *state = *state;
-            break;
-        }
-        else if (byte == (tx ? A_RC : A_TX))
-        {
-            *state = A_RCV;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case A_RCV:
-        if (byte == (tx ? C_UA : C_SET))
-        {
-            *state = C_RCV;
-            break;
-        }
-        else if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case C_RCV:
-        if (byte == (tx ? (A_RC ^ C_UA) : (A_TX ^ C_SET)))
-        {
-            *state = BCC_OK;
-            break;
-        }
-        else if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case BCC_OK:
-        if (byte == F_FLAG)
-        {
-            *state = STOP;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    default:
-        break;
-    }
-}
-
-void state_machine_control_packet(int *state, unsigned char byte)
-{
-    switch (*state)
-    {
-    case START:
-        if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else
-        {
-            *state = *state;
-            break;
-        }
-    case FLAG_RCV:
-        if (byte == F_FLAG)
-        {
-            *state = *state;
-            break;
-        }
-        else if (byte == A_TX)
-        {
-            *state = A_RCV;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case A_RCV:
-        if (byte == (frame_nr == 0 ? C_RR0 : C_RR1))
-        {
-            *state = C_RCV;
-            break;
-        }
-        else if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else if (byte == (frame_nr == 0 ? C_REJ1 : C_REJ0))
-        {
-            *state = RESEND;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case C_RCV:
-        if (byte == (frame_nr == 0 ? BCC(A_TX, C_RR0) : BCC(A_TX, C_RR1)))
-        {
-            *state = BCC_OK;
-            break;
-        }
-        else if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case BCC_OK:
-        if (byte == F_FLAG)
-        {
-            *state = STOP;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    default:
-        break;
-    }
-}
-
-void state_machine_writes(int *state, unsigned char byte, bool bcc2_checked)
-{
-    switch (*state)
-    {
-    case START:
-        if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else
-        {
-            *state = *state;
-            break;
-        }
-    case FLAG_RCV:
-        if (byte == F_FLAG)
-        {
-            *state = *state;
-            break;
-        }
-        else if (byte == A_TX)
-        {
-            *state = A_RCV;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case A_RCV:
-        if (byte == (frame_ns == 0 ? C_FRAME0 : C_FRAME1))
-        {
-            *state = C_RCV;
-            break;
-        }
-        else if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case C_RCV:
-        if (byte == (frame_ns == 0 ? BCC(A_TX, C_FRAME0) : BCC(A_TX, C_FRAME1)))
-        {
-            *state = BCC_OK;
-            break;
-        }
-        else if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case BCC_OK:
-        if (byte == ESC)
-        {
-            *state = DATA_STUFFED;
-            break;
-        }
-        else if (byte != F_FLAG)
-        {
-            *state = *state;
-            break;
-        }
-        else
-        {
-            *state = BCC2_CHECK;
-            break;
-        }
-    case DATA_STUFFED:
-        if (byte == ESC)
-        {
-            *state = *state;
-            break;
-        }
-        else
-        {
-            *state = BCC_OK;
-            break;
-        }
-    case BCC2_CHECK:
-        if (bcc2_checked)
-        {
-            *state = STOP;
-        }
-        else
-        {
-            *state = START;
-        }
-    default:
-        break;
-    }
-}
-
-void state_machine_close(int *state, unsigned char byte)
-{
-    switch (*state)
-    {
-    case START:
-        if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else
-        {
-            *state = *state;
-            break;
-        }
-    case FLAG_RCV:
-        if (byte == F_FLAG)
-        {
-            *state = *state;
-            break;
-        }
-        else if (byte == A_TX)
-        {
-            *state = A_RCV;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case A_RCV:
-        if (byte == C_DISC)
-        {
-            *state = C_RCV;
-            break;
-        }
-        else if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case C_RCV:
-        if (byte == (A_TX ^ C_DISC))
-        {
-            *state = BCC_OK;
-            break;
-        }
-        else if (byte == F_FLAG)
-        {
-            *state = FLAG_RCV;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    case BCC_OK:
-        if (byte == F_FLAG)
-        {
-            *state = STOP;
-            break;
-        }
-        else
-        {
-            *state = START;
-            break;
-        }
-    default:
-        break;
-    }
 }

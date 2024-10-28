@@ -5,14 +5,27 @@
 #include <string.h>
 #include <stdio.h>
 #include "constants.h"
+#include <limits.h>
 
 unsigned char sequence_number = 0;
 
-long int calculate_file_size(const char *filename)
+struct ctrlPacket {
+    unsigned char type;
+    unsigned char file_name[UCHAR_MAX + 1];
+    size_t file_size;
+};
+
+struct dataPacket {
+    int sequence_number;
+    size_t packet_size;
+    unsigned char
+}
+
+size_t calculate_file_size(const char *filename)
 {
     FILE *fp = fopen(filename, "r");
     fseek(fp, 0L, SEEK_END);
-    long int res = ftell(fp);
+    size_t res = ftell(fp);
     fclose(fp);
     return res;
 }
@@ -33,26 +46,52 @@ void buildDataPacket(unsigned char *buf, int num_bytes_read, unsigned char *pack
     memcpy(buf + 4, packet, num_bytes_read);
 }
 
-void buildControlPacket(unsigned char *buf, int start, const char *filename, int *ctrl_packet_size)
+size_t build_control_packet(unsigned char *packet, ctrlPacket ctrl_packet_info)
 {
-    int file_size = calculate_file_size(filename);
+    buf[0] = ctrl_packet_info.type;
 
-    printf("filesize :%d\n", file_size);
+    buf[1] = PACKET_CONTROL_FILESIZE;
 
-    buf[0] = start;
-    buf[1] = 0;
-    buf[2] = sizeof(file_size);
-    buf[3] = file_size;
-    buf[4] = file_size >> 8;
-    buf[5] = file_size >> 16;
-    buf[6] = 1;
-    buf[7] = strlen(filename);
-    for (int i = 0; i < strlen(filename); i++)
-    {
-        buf[i + 8] = filename[i];
-    }
-    *ctrl_packet_size = strlen(filename) + 8;
+    size_t filesize = ctrl_packet_info.file_size;
+
+    buf[2] = sizeof(filesize);
+    buf[3] = filesize;
+    buf[4] = filesize >> 8;
+    buf[5] = filesize >> 16;
+    
+    buf[6] = PACKET_CONTROL_FILENAME;
+
+    size_t filename_length = strlen(ctrl_packet_info.file_name);
+
+    buf[7] = filename_length;
+
+    memcpy(buf + 8, ctrl_packet_info.file_name, filename_length + 1);
+    
+    return filename_length + 8;
 }
+
+void application_layer_tx_protocol(const char* filename){
+    unsigned char initial_ctrl_packet[MAX_PAYLOAD_SIZE];
+
+    ctrlPacket ctrl_packet_info = {
+        .type = CTRL_START,
+        .file_size = calculate_file_size(filename)
+    };
+
+    strcpy(ctrlPacket.file_name, filename);
+
+    size_t ctrl_packet_size = buildControlPacket(initial_ctrl_packet, ctrl_packet_info);
+
+    if(llwrite(initial_ctrl_packet, ctrl_packet_size) != 0)){
+        printf("Error writing control packet.\n");
+        exit(1);
+    }
+
+    FILE* ptr = fopen(filename, "rb");
+    
+
+}
+
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
@@ -74,19 +113,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     if (linkLayer.role == LlTx)
     {
-        int ctrl_packet_size = 0;
-
-        unsigned char initial_ctrl_packet[1000] = {0};
-        buildControlPacket(initial_ctrl_packet, 1, filename, &ctrl_packet_size);
-        llwrite(initial_ctrl_packet, ctrl_packet_size);
-
-        printf("Start control packet sent!\n");
         unsigned char part_penguin[1004] = {0};
-
-        FILE *ptr;
-        ptr = fopen(filename, "rb");
-        printf("File opened to read!\n");
-
         int num_bytes_read;
 
         while ((num_bytes_read = fread(part_penguin, sizeof(char), 1000, ptr)) > 0)
