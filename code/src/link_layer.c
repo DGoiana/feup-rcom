@@ -58,38 +58,27 @@ int sendData(const unsigned char *buf, int bufSize)
     int index_buf = 0;
     int index_send = 4;
 
-/*     int j = 0;
-    while(j < bufSize) {
-        printf("buf[i]: 0x%02X\n",buf[j]);
-        j++;
-    } */
+    printf("\n");
 
-    while (index_send < bufSize + 6) // will this work?
+    while (index_send < bufSize + 4) // will this work?
     {
         if(buf[index_buf] == F_FLAG) {
             send[index_send] = 0x7D;
             index_send++;
+            bufSize++;
             send[index_send] = 0x5E;
         } else {
             send[index_send] = buf[index_buf];
         }
         int oldbcc2 = bcc2;
         bcc2 = BCC(bcc2, buf[index_buf]);
-/*         printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",oldbcc2,buf[index_buf],bcc2); */
         index_buf++;
         index_send++;
     }
     send[index_send] = bcc2;
-/*     send[index_send] = 0xFF; */
+    printf("sent bcc2: 0x%02x\n",bcc2);
     index_send++;
     send[index_send] = F_FLAG;
-
-/*     int j = 0;
-    while(send[j] != 'A') {
-        printf("var: 0x%02x\n",send[j]);
-        j++;
-    }
-    printf("\n"); */
 
     int frame_0_bytes = writeBytesSerialPort(send, index_send);
 }
@@ -230,15 +219,13 @@ int llread(unsigned char *packet)
     {
         if (readByteSerialPort(&byte) > 0)
         {
-/*             printf("current_byte : 0x%02x\n",byte);
-            printf("current_state : %d\n",state); */
             int oldbcc2 = bcc2;            
 
             if (state == BCC2_CHECK)
             {
                 printf("bcc2: 0x%02x\n",bcc2);
                 printf("last: 0x%02x\n",last);
-                packet[i-1] = 0x00;
+                packet[i-1] = NULL;
                 bcc_checked = bcc2 == 0;
                 if(bcc_checked == false){
                     sendMessage(A_TX, (frame_ns == 0 ? C_REJ0 : C_REJ1));
@@ -246,17 +233,15 @@ int llread(unsigned char *packet)
                     printf("sent error message\n");
                     bcc2 = 0x00;
                 }
-/*                 printf("data_packet:");
-                for(int i = 1; i < 1000; i++) {
-                    printf(" 1x%02x ",packet[i]);
-                }  */
+                printf("read_buff:");
+                for(int i = 0; i < 1004; i++) {
+                    printf(" 0x%02x ",packet[i]);
+                } 
             }
-/*             printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",bcc2,oldbcc2,byte); */
             if(state == BCC_OK) {
                 if(byte != ESC && byte != F_FLAG) {
                     packet[i] = byte; i++;
                     bcc2 = BCC(bcc2,byte);
-/*                     printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",oldbcc2,byte,bcc2); */
                     last = byte;
                 }
             }
@@ -264,7 +249,6 @@ int llread(unsigned char *packet)
                 if(byte == REPLACED) {
                     packet[i] = F_FLAG; i++;
                     bcc2 = BCC(bcc2,F_FLAG);
-/*                     printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",oldbcc2,F_FLAG,bcc2); */
                     last = F_FLAG;
                 } else if(byte == ESC) {
                     packet[i] = ESC; i++;
@@ -273,11 +257,9 @@ int llread(unsigned char *packet)
                 } else {
                     packet[i] = ESC; i++;
                     bcc2 = BCC(bcc2,ESC);
-/*                     printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",oldbcc2,ESC,bcc2); */
                     packet[i] = byte; i++;
                     oldbcc2 = bcc2;            
                     bcc2 = BCC(bcc2,byte);
-/*                     printf("0x%02x (old BCC) XOR 0x%02x (BYTE) = 0x%02x (newBCC2) \n",oldbcc2,byte,bcc2); */
                     last = byte;
                 }
             }

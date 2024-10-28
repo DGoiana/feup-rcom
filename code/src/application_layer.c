@@ -69,18 +69,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     linkLayer.nRetransmissions = nTries;
     linkLayer.timeout = timeout;
 
-    // CAREFUL WITH THE BUF_SIZE
     llopen(linkLayer);
     // TODO: error handlingshed changes
 
-/*     unsigned char buf[100] = {0};
-
-    if(linkLayer.role == LlTx) {
-        unsigned char send[11] = {0x1,0x2,0x3,0x4,0x7e,0x7e,0x5};
-        llwrite(send,11);
-    } else {
-        llread(buf);
-    } */
 
     if (linkLayer.role == LlTx)
     {
@@ -103,11 +94,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         {
             unsigned char data_packet[1004] = {0};
             buildDataPacket(data_packet, num_bytes_read, part_penguin);
-            printf("data_packet:");
-            for(int i = 0; i < 1004; i++) {
-                printf(" 0x%02x ",data_packet[i]);
-            }
-            printf("\n");
 
             if (llwrite(data_packet, num_bytes_read + 4) != 0)
             {
