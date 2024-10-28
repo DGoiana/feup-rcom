@@ -37,7 +37,7 @@ void buildControlPacket(unsigned char *buf, int start, const char *filename, int
 {
     int file_size = calculate_file_size(filename);
 
-    printf("filesize :%d\n",file_size);
+    printf("filesize :%d\n", file_size);
 
     buf[0] = start;
     buf[1] = 0;
@@ -72,17 +72,16 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     llopen(linkLayer);
     // TODO: error handlingshed changes
 
-
     if (linkLayer.role == LlTx)
     {
         int ctrl_packet_size = 0;
 
-        unsigned char initial_ctrl_packet[100] = {0};
+        unsigned char initial_ctrl_packet[1000] = {0};
         buildControlPacket(initial_ctrl_packet, 1, filename, &ctrl_packet_size);
         llwrite(initial_ctrl_packet, ctrl_packet_size);
 
         printf("Start control packet sent!\n");
-        unsigned char part_penguin[1000] = {0};
+        unsigned char part_penguin[1004] = {0};
 
         FILE *ptr;
         ptr = fopen(filename, "rb");
@@ -103,7 +102,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             printf("Sent part of penguin!\n");
         }
 
-        unsigned char final_ctrl_packet[100] = {0};
+        unsigned char final_ctrl_packet[1000] = {0};
         ctrl_packet_size = 0;
 
         printf("sending final control packet...\n");
@@ -117,15 +116,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         ptr = fopen(filename, "wb+");
 
         // read initial control packet
-        unsigned char initial_ctrl_packet[100] = {0};
+        unsigned char initial_ctrl_packet[1000] = {0};
         int k = 0;
 
+        printf("waiting for control packet:\n");
         llread(initial_ctrl_packet);
-        printf("initial_ctrl_packet:");
-        for(int i = 0; i < 8; i++) {
-            printf(" 0x%02x ",initial_ctrl_packet[i]);
-        } 
-        printf("\n");
 
         if (initial_ctrl_packet[0] != 1)
             return;
@@ -151,19 +146,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             int size = part_penguin[2] * 256 + part_penguin[3];
 
             memcpy(to_write_penguin, part_penguin + 4, size);
-            printf("copied %d bytes from received to write \n",size);
-            printf("data_packet:");
-            for(int i = 0; i < 1000; i++) {
-                printf(" 0x%02x ",part_penguin[i+4]);
-            } 
-            printf("\n");
+            printf("copied %d bytes from received to write \n", size);
 
             fwrite(to_write_penguin, 1, size, ptr);
             printf("Writing part of penguin...\n");
 
             printf("Trying to read penguin...\n");
-            llread(part_penguin); 
-            printf("frame %d\n",k);
+            llread(part_penguin);
+            printf("frame %d\n", k);
             k++;
         }
 
@@ -177,4 +167,4 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     }
 
     llclose(0);
-}; 
+};
