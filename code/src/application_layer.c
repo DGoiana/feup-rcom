@@ -139,7 +139,7 @@ void application_layer_rx_protocol(const char *filename)
 
     while (TRUE)
     {
-        llread(data_packet.packet);
+        llread(&data_packet.packet);
 
         if (data_packet.packet[0] != DATA && data_packet.packet[0] == CTRL_FINISH)
         {
@@ -171,10 +171,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     llopen(linkLayer);
 
-    if (r == LlTx)
+    if (r == LlTx) {
         application_layer_tx_protocol(filename);
-    else
+        llclose(1);
+    }
+    else {
         application_layer_rx_protocol(filename);
+        llclose(0);
+    }
 
-    llclose(0);
 };

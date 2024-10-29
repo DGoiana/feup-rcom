@@ -168,6 +168,7 @@ int llwrite(const unsigned char *buf, int bufSize)
 
     alarmEnabled = false;
 
+    stat_start_frame_timer();
     while (state != STOP && tries != 0)
     {
 
@@ -189,6 +190,13 @@ int llwrite(const unsigned char *buf, int bufSize)
 
             if (state == RESEND)
             {
+                stat_add_bad_frame();
+
+                double t_total = stat_get_t_total();
+                double t_frame = (double)bufSize/(double)cp.baudRate;
+                double frame_efficiency = t_frame / t_total;
+                stat_add_total_efficiency(frame_efficiency);
+
                 printf("resending I - ns0 without timeout\n");
                 state = START;
                 tries = cp.nRetransmissions + 1;
@@ -206,6 +214,14 @@ int llwrite(const unsigned char *buf, int bufSize)
     }
     else
     {
+        stat_set_bits_received(bufSize+5);
+        stat_add_good_frame();
+
+        double t_total = stat_get_t_total();
+        double t_frame = (double)bufSize/(double)cp.baudRate;
+        double frame_efficiency = t_frame / t_total;
+        stat_add_total_efficiency(frame_efficiency);
+
         printf("received RR - nr1\n");
         frame_ns = (frame_ns == 0 ? 1 : 0);
         printf("changed ns to %d\n", frame_ns);
@@ -296,7 +312,7 @@ int llread(unsigned char *packet)
     printf("received i-ns\n");
     sendMessage(A_TX, (frame_ns == 0 ? C_RR1 : C_RR0));
     stat_set_bits_received(i+5);
-    stat_add_good_frame;
+    stat_add_good_frame();
     printf("sent rr-nr\n");
     frame_ns = (frame_ns == 0 ? 1 : 0);
     frame_nr = (frame_nr == 0 ? 1 : 0);
@@ -378,14 +394,18 @@ int llclose(int showStatistics)
         double bad_frames = stat_get_bad_frames();
         double good_frames = stat_get_good_frames();
         double bit_rate = stat_get_bitrate(time_taken); 
+        double avg_efficiency = stat_get_average_effiency();
+        double avg_a = stat_get_average_a();
 
         printf("Statistics: \n");
-        printf("|- Transfer time: \n");
-        printf("|- Bit-rate: \n");
-        printf("|- FER: \n");
-        printf("|- Max frame Size: \n");
-        printf("|- Nº bad frames: \n");
-        printf("|- Nº good frames: \n");
+        printf("|- Transfer time: %f\n",time_taken);
+        printf("|- Bit-rate: %f\n",bit_rate);
+        printf("|- FER: %f\n",fer);
+        printf("|- Max frame Size: %ld\n",MAX_PAYLOAD_SIZE);
+        printf("|- Nº bad frames: %f\n",bad_frames);
+        printf("|- Nº good frames: %f\n",good_frames);
+        printf("|- Average Efficiency: %f\n",avg_efficiency);
+        printf("|- Average A: %f\n",avg_a);
     }
 
     int clstat = closeSerialPort();
