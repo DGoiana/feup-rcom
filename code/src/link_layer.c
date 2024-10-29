@@ -200,12 +200,12 @@ int llwrite(const unsigned char *buf, int bufSize)
                 printf("resending I - ns0 without timeout\n");
                 state = START;
                 tries = cp.nRetransmissions + 1;
-                //alarm(0);
                 break;
             }
         }
 
         tries--;
+        alarmEnabled = false;
     }
     if (state != STOP)
     {
