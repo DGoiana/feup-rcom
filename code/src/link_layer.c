@@ -23,7 +23,7 @@ int frame_ns = 0;
 int frame_nr = 1;
 
 int counter = 0;
-
+bool once = true;
 
 void alarmHandler(int signal)
 {
@@ -63,10 +63,10 @@ int sendData(const unsigned char *buf, int bufSize)
     {
         if (buf[index_buf] == F_FLAG)
         {
-            send[index_send] = 0x7D;
+            send[index_send] = ESC;
             index_send++;
             bufSize++;
-            send[index_send] = 0x5E;
+            send[index_send] = REPLACED;
         }
         else
         {
@@ -98,7 +98,6 @@ int llopen(LinkLayer connectionParameters)
     if (file_descriptor < 0)
         return -1;
 
-    stat_start_timer();
 
     if (connectionParameters.role == LlTx)
     {
@@ -157,6 +156,11 @@ int llopen(LinkLayer connectionParameters)
 int llwrite(const unsigned char *buf, int bufSize)
 {
     // F  A  C  BCC1 D1 ... Dn BCC2 F
+    if(once == true) {
+        stat_start_timer();
+    }
+    once = false;
+    
 
     int state = 0;
     int tries = cp.nRetransmissions;
@@ -168,13 +172,13 @@ int llwrite(const unsigned char *buf, int bufSize)
 
     alarmEnabled = false;
 
-    stat_start_frame_timer();
     while (state != STOP && tries != 0)
     {
 
         if (alarmEnabled == false)
         {
             sendData(buf, bufSize);
+            stat_set_bits_received(bufSize+5);
             printf("sent I - ns0\n");
             alarm(cp.timeout);
             alarmEnabled = true;
@@ -191,11 +195,6 @@ int llwrite(const unsigned char *buf, int bufSize)
             if (state == RESEND)
             {
                 stat_add_bad_frame();
-
-                double t_total = stat_get_t_total();
-                double t_frame = (double)bufSize/(double)cp.baudRate;
-                double frame_efficiency = t_frame / t_total;
-                stat_add_total_efficiency(frame_efficiency);
 
                 printf("resending I - ns0 without timeout\n");
                 state = START;
@@ -214,7 +213,6 @@ int llwrite(const unsigned char *buf, int bufSize)
     }
     else
     {
-        stat_set_bits_received(bufSize+5);
         stat_add_good_frame();
 
         double t_total = stat_get_t_total();
@@ -236,6 +234,11 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
+    if(once == true) {
+        stat_start_timer();
+    }
+    once = false;
+
     int i = 0;
     int state = 0;
     unsigned char byte = 0x00;
@@ -259,6 +262,7 @@ int llread(unsigned char *packet)
                 if (bcc_checked == false)
                 {
                     stat_add_bad_frame();
+                    stat_set_bits_received(i+4);
                     sendMessage(A_TX, (frame_ns == 0 ? C_REJ0 : C_REJ1));
                     state = START;
                     printf("sent error message\n");
@@ -311,7 +315,7 @@ int llread(unsigned char *packet)
 
     printf("received i-ns\n");
     sendMessage(A_TX, (frame_ns == 0 ? C_RR1 : C_RR0));
-    stat_set_bits_received(i+5);
+    stat_set_bits_received(i+4);
     stat_add_good_frame();
     printf("sent rr-nr\n");
     frame_ns = (frame_ns == 0 ? 1 : 0);
@@ -393,19 +397,20 @@ int llclose(int showStatistics)
         double fer = stat_get_fer();
         double bad_frames = stat_get_bad_frames();
         double good_frames = stat_get_good_frames();
-        double bit_rate = stat_get_bitrate(time_taken); 
-        double avg_efficiency = stat_get_average_effiency();
-        double avg_a = stat_get_average_a();
+        double baud_rate = stat_get_bitrate(time_taken); 
+        double efficiency = baud_rate/cp.baudRate;
+        double a = ((1/efficiency) - 1)/2;
 
         printf("Statistics: \n");
         printf("|- Transfer time: %f\n",time_taken);
-        printf("|- Bit-rate: %f\n",bit_rate);
+        printf("|- Measured Baud-rate: %f\n",baud_rate);
+        printf("|- Measured Baud-rate: %d\n",cp.baudRate);
         printf("|- FER: %f\n",fer);
         printf("|- Max frame Size: %ld\n",MAX_PAYLOAD_SIZE);
         printf("|- Nº bad frames: %f\n",bad_frames);
         printf("|- Nº good frames: %f\n",good_frames);
-        printf("|- Average Efficiency: %f\n",avg_efficiency);
-        printf("|- Average A: %f\n",avg_a);
+        printf("|- Efficiency: %f\n",efficiency);
+        printf("|- a: %f\n",a);
     }
 
     int clstat = closeSerialPort();

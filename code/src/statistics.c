@@ -27,14 +27,6 @@ void stat_add_total_efficiency(double frame_efficiency) {
   sum_efficiency = sum_efficiency + frame_efficiency;
 }
 
-double stat_get_average_effiency() {
-  return sum_efficiency / (good_frames + bad_frames);
-}
-
-double stat_get_average_a() {
-  double average_efficiency = stat_get_average_effiency();
-  return ((1/average_efficiency) - 1)/2;
-}
 
 double stat_get_time() {
   struct timeval finish;
@@ -44,7 +36,7 @@ double stat_get_time() {
 }
 
 void stat_set_bits_received(int bytes) {
-  received_bits = bytes * 8;
+  received_bits += bytes * 8;
 }
 
 long stat_get_bits_received() {

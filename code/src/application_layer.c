@@ -173,11 +173,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     if (r == LlTx) {
         application_layer_tx_protocol(filename);
-        llclose(1);
     }
     else {
         application_layer_rx_protocol(filename);
-        llclose(0);
     }
-
+    llclose(1);
 };
