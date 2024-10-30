@@ -85,7 +85,7 @@ int sendData(const unsigned char *buf, int bufSize)
 }
 
 ////////////////////////////////////////////////
-// LLOPENbyte
+// LLOPEN
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
@@ -108,7 +108,7 @@ int llopen(LinkLayer connectionParameters)
             {
                 if (readByteSerialPort(&byte) > 0)
                     state_machine_sendSET(byte, &state, true);
-            }
+            }    
 
             if (alarmEnabled == false)
             {
@@ -147,7 +147,7 @@ int llopen(LinkLayer connectionParameters)
         // printf("NOT sent C_UA");
         printf("opened\n");
     }
-    return file_descriptor;
+    return 0;
 }
 
 ////////////////////////////////////////////////
@@ -178,7 +178,7 @@ int llwrite(const unsigned char *buf, int bufSize)
         if (alarmEnabled == false)
         {
             sendData(buf, bufSize);
-            stat_set_bits_received(bufSize+5);
+            
             printf("sent I - ns0\n");
             alarm(cp.timeout);
             alarmEnabled = true;
@@ -195,6 +195,7 @@ int llwrite(const unsigned char *buf, int bufSize)
             if (state == RESEND)
             {
                 stat_add_bad_frame();
+                stat_set_bits_received(bufSize+4);
 
                 printf("resending I - ns0 without timeout\n");
                 state = START;
@@ -214,6 +215,7 @@ int llwrite(const unsigned char *buf, int bufSize)
     else
     {
         stat_add_good_frame();
+        stat_set_bits_received(bufSize+5);
 
         double t_total = stat_get_t_total();
         double t_frame = (double)bufSize/(double)cp.baudRate;
@@ -309,6 +311,15 @@ int llread(unsigned char *packet)
                 }
             }
 
+            if(state == A_RCV){
+                if((frame_ns == 0 && byte == 0x80) || (frame_ns == 1 && byte == 0x00)){
+                    printf("teste");
+                    // frame_ns = (frame_ns == 0 ? 1 : 0);
+                    // frame_nr = (frame_nr == 0 ? 1 : 0);
+                    return -1;
+                }
+            }
+
             state_machine_writes(&state, byte, bcc_checked,frame_ns);
         }
     }
@@ -328,6 +339,19 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 int llclose(int showStatistics)
 {
+
+     double time_taken = stat_get_time();
+        double fer = stat_get_fer();
+        double bad_frames = stat_get_bad_frames();
+        double good_frames = stat_get_good_frames();
+        double baud_rate = stat_get_bitrate(time_taken); 
+        double efficiency = baud_rate/cp.baudRate;
+        double a = ((1/efficiency) - 1)/2;
+
+
+    (void)signal(SIGALRM, alarmHandler);
+    alarmEnabled = false;
+
     int state = 0;
     unsigned char byte = 0x00;
     if (file_descriptor < 0)
@@ -335,26 +359,28 @@ int llclose(int showStatistics)
 
     if (cp.role == LlTx)
     {
-        (void)signal(SIGALRM, alarmHandler);
         while (cp.nRetransmissions != 0 && state != STOP)
         {
-
-            sendMessage(A_TX, C_DISC);
+            
+            if(alarmEnabled == false){
+                sendMessage(A_TX, C_DISC);
             printf("sent C_DISC\n");
-            alarmEnabled = false;
-            alarm(cp.timeout);
+            alarm(1);
+            alarmEnabled = true;
+            }
+            
 
-            while (alarmEnabled == false && state != STOP)
+            while (alarmEnabled == true && state != STOP)
             {
                 if (readByteSerialPort(&byte) > 0)
                     state_machine_close(&state, byte);
             }
             cp.nRetransmissions--;
+            alarmEnabled = false;
         }
         if (state != STOP)
         {
             printf("timed out\n");
-            return -1;
         }
         else
         {
@@ -393,16 +419,9 @@ int llclose(int showStatistics)
     }
 
     if(showStatistics) {
-        double time_taken = stat_get_time();
-        double fer = stat_get_fer();
-        double bad_frames = stat_get_bad_frames();
-        double good_frames = stat_get_good_frames();
-        double baud_rate = stat_get_bitrate(time_taken); 
-        double efficiency = baud_rate/cp.baudRate;
-        double a = ((1/efficiency) - 1)/2;
-
         printf("Statistics: \n");
         printf("|- Transfer time: %f\n",time_taken);
+        printf("|- Bits sent: %f\n", baud_rate * time_taken);
         printf("|- Measured Baud-rate: %f\n",baud_rate);
         printf("|- Measured Baud-rate: %d\n",cp.baudRate);
         printf("|- FER: %f\n",fer);
