@@ -144,7 +144,6 @@ int llopen(LinkLayer connectionParameters)
         printf("received C_SET\n");
         sendMessage(A_RC, C_UA);
         printf("sent C_UA\n");
-        // printf("NOT sent C_UA");
         printf("opened\n");
     }
     return 0;
@@ -160,7 +159,7 @@ int llwrite(const unsigned char *buf, int bufSize)
         stat_start_timer();
     }
     once = false;
-    
+
 
     int state = 0;
     int tries = cp.nRetransmissions;
@@ -313,9 +312,9 @@ int llread(unsigned char *packet)
 
             if(state == A_RCV){
                 if((frame_ns == 0 && byte == 0x80) || (frame_ns == 1 && byte == 0x00)){
-                    printf("teste");
-                    // frame_ns = (frame_ns == 0 ? 1 : 0);
-                    // frame_nr = (frame_nr == 0 ? 1 : 0);
+                    frame_ns = (frame_ns == 0 ? 1 : 0);
+                    frame_nr = (frame_nr == 0 ? 1 : 0);
+                    sendMessage(A_TX, (frame_ns == 0 ? C_RR1 : C_RR0));
                     return -1;
                 }
             }
