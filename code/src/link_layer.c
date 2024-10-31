@@ -10,7 +10,6 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
@@ -41,7 +40,7 @@ int sendMessage(int A, int C)
     buf[3] = BCC(A, C);
     buf[4] = F_FLAG;
 
-    int bytes = writeBytesSerialPort(buf, 5);
+    return writeBytesSerialPort(buf, 5);
 }
 
 int sendData(const unsigned char *buf, int bufSize)
@@ -57,8 +56,6 @@ int sendData(const unsigned char *buf, int bufSize)
     int index_buf = 0;
     int index_send = 4;
 
-    printf("\n");
-
     while (index_send < bufSize + 4) // will this work?
     {
         if (buf[index_buf] == F_FLAG)
@@ -72,7 +69,6 @@ int sendData(const unsigned char *buf, int bufSize)
         {
             send[index_send] = buf[index_buf];
         }
-        int oldbcc2 = bcc2;
         bcc2 = BCC(bcc2, buf[index_buf]);
         index_buf++;
         index_send++;
@@ -81,7 +77,7 @@ int sendData(const unsigned char *buf, int bufSize)
     index_send++;
     send[index_send] = F_FLAG;
 
-    int frame_0_bytes = writeBytesSerialPort(send, index_send + 2);
+    return writeBytesSerialPort(send, index_send + 2);
 }
 
 ////////////////////////////////////////////////
@@ -98,7 +94,6 @@ int llopen(LinkLayer connectionParameters)
     if (file_descriptor < 0)
         return -1;
 
-
     if (connectionParameters.role == LlTx)
     {
         (void)signal(SIGALRM, alarmHandler);
@@ -108,28 +103,23 @@ int llopen(LinkLayer connectionParameters)
             {
                 if (readByteSerialPort(&byte) > 0)
                     state_machine_sendSET(byte, &state, true);
-            }    
+            }
 
             if (alarmEnabled == false)
             {
                 alarmEnabled = true;
                 alarm(connectionParameters.timeout);
                 sendMessage(A_TX, C_SET);
-                printf("sent C_SET\n");
             }
             tries--;
         }
         if (state != STOP)
         {
-            printf("timed out\n");
+            printf("Timed out after %i tries!\n", cp.nRetransmissions);
             return -1;
         }
         else
-        {
-            printf("received C_UA\n");
-            printf("opened\n");
             return 0;
-        }
     }
     else
     {
@@ -141,10 +131,7 @@ int llopen(LinkLayer connectionParameters)
             if (readByteSerialPort(&byte) > 0)
                 state_machine_sendSET(byte, &state, false);
         }
-        printf("received C_SET\n");
         sendMessage(A_RC, C_UA);
-        printf("sent C_UA\n");
-        printf("opened\n");
     }
     return 0;
 }
@@ -155,11 +142,11 @@ int llopen(LinkLayer connectionParameters)
 int llwrite(const unsigned char *buf, int bufSize)
 {
     // F  A  C  BCC1 D1 ... Dn BCC2 F
-    if(once == true) {
+    if (once == true)
+    {
         stat_start_timer();
     }
     once = false;
-
 
     int state = 0;
     int tries = cp.nRetransmissions;
@@ -177,8 +164,6 @@ int llwrite(const unsigned char *buf, int bufSize)
         if (alarmEnabled == false)
         {
             sendData(buf, bufSize);
-            
-            printf("sent I - ns0\n");
             alarm(cp.timeout);
             alarmEnabled = true;
         }
@@ -186,17 +171,14 @@ int llwrite(const unsigned char *buf, int bufSize)
         while (alarmEnabled == true && state != STOP)
         {
             if (readByteSerialPort(&byte) > 0)
-            {
-                state_machine_control_packet(&state, byte,frame_nr);
-                printf("byte read\n");
-            }
+                state_machine_control_packet(&state, byte, frame_nr);
 
             if (state == RESEND)
             {
                 stat_add_bad_frame();
-                stat_set_bits_received(bufSize+4);
+                stat_set_bits_received(bufSize + 4);
 
-                printf("resending I - ns0 without timeout\n");
+                printf("Error. Resending...\n");
                 state = START;
                 tries = cp.nRetransmissions + 1;
                 break;
@@ -208,24 +190,21 @@ int llwrite(const unsigned char *buf, int bufSize)
     }
     if (state != STOP)
     {
-        printf("timed out\n");
+        printf("Timed out after %d tries!\n", cp.nRetransmissions);
         return -1;
     }
     else
     {
         stat_add_good_frame();
-        stat_set_bits_received(bufSize+5);
+        stat_set_bits_received(bufSize + 5);
 
         double t_total = stat_get_t_total();
-        double t_frame = (double)bufSize/(double)cp.baudRate;
+        double t_frame = (double)bufSize / (double)cp.baudRate;
         double frame_efficiency = t_frame / t_total;
         stat_add_total_efficiency(frame_efficiency);
 
-        printf("received RR - nr1\n");
         frame_ns = (frame_ns == 0 ? 1 : 0);
-        printf("changed ns to %d\n", frame_ns);
         frame_nr = (frame_nr == 0 ? 1 : 0);
-        printf("changed nr to %d\n", frame_nr);
     }
     return 0;
 }
@@ -235,7 +214,8 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
-    if(once == true) {
+    if (once == true)
+    {
         stat_start_timer();
     }
     once = false;
@@ -245,17 +225,13 @@ int llread(unsigned char *packet)
     unsigned char byte = 0x00;
 
     unsigned char bcc2 = 0x00;
-    unsigned char last = 0x00;
 
     bool bcc_checked = false;
-    bool temp_stuffed = false;
 
     while (state != STOP)
     {
         if (readByteSerialPort(&byte) > 0)
         {
-            int oldbcc2 = bcc2;
-
             if (state == BCC2_CHECK)
             {
                 packet[i - 1] = '\0';
@@ -263,10 +239,10 @@ int llread(unsigned char *packet)
                 if (bcc_checked == false)
                 {
                     stat_add_bad_frame();
-                    stat_set_bits_received(i+4);
+                    stat_set_bits_received(i + 4);
                     sendMessage(A_TX, (frame_ns == 0 ? C_REJ0 : C_REJ1));
                     state = START;
-                    printf("sent error message\n");
+                    printf("Error!\n");
                     bcc2 = 0x00;
                     i = 0;
                 }
@@ -278,7 +254,6 @@ int llread(unsigned char *packet)
                     packet[i] = byte;
                     i++;
                     bcc2 = BCC(bcc2, byte);
-                    last = byte;
                 }
             }
             if (state == DATA_STUFFED)
@@ -288,14 +263,12 @@ int llread(unsigned char *packet)
                     packet[i] = F_FLAG;
                     i++;
                     bcc2 = BCC(bcc2, F_FLAG);
-                    last = F_FLAG;
                 }
                 else if (byte == ESC)
                 {
                     packet[i] = ESC;
                     i++;
                     bcc2 = BCC(bcc2, ESC);
-                    last = ESC;
                 }
                 else
                 {
@@ -304,14 +277,14 @@ int llread(unsigned char *packet)
                     bcc2 = BCC(bcc2, ESC);
                     packet[i] = byte;
                     i++;
-                    oldbcc2 = bcc2;
                     bcc2 = BCC(bcc2, byte);
-                    last = byte;
                 }
             }
 
-            if(state == A_RCV){
-                if((frame_ns == 0 && byte == 0x80) || (frame_ns == 1 && byte == 0x00)){
+            if (state == A_RCV)
+            {
+                if ((frame_ns == 0 && byte == 0x80) || (frame_ns == 1 && byte == 0x00))
+                {
                     frame_ns = (frame_ns == 0 ? 1 : 0);
                     frame_nr = (frame_nr == 0 ? 1 : 0);
                     sendMessage(A_TX, (frame_ns == 0 ? C_RR1 : C_RR0));
@@ -319,15 +292,13 @@ int llread(unsigned char *packet)
                 }
             }
 
-            state_machine_writes(&state, byte, bcc_checked,frame_ns);
+            state_machine_writes(&state, byte, bcc_checked, frame_ns);
         }
     }
 
-    printf("received i-ns\n");
     sendMessage(A_TX, (frame_ns == 0 ? C_RR1 : C_RR0));
-    stat_set_bits_received(i+4);
+    stat_set_bits_received(i + 4);
     stat_add_good_frame();
-    printf("sent rr-nr\n");
     frame_ns = (frame_ns == 0 ? 1 : 0);
     frame_nr = (frame_nr == 0 ? 1 : 0);
     return 0;
@@ -339,14 +310,13 @@ int llread(unsigned char *packet)
 int llclose(int showStatistics)
 {
 
-     double time_taken = stat_get_time();
-        double fer = stat_get_fer();
-        double bad_frames = stat_get_bad_frames();
-        double good_frames = stat_get_good_frames();
-        double baud_rate = stat_get_bitrate(time_taken); 
-        double efficiency = baud_rate/cp.baudRate;
-        double a = ((1/efficiency) - 1)/2;
-
+    double time_taken = stat_get_time();
+    double fer = stat_get_fer();
+    double bad_frames = stat_get_bad_frames();
+    double good_frames = stat_get_good_frames();
+    double baud_rate = stat_get_bitrate(time_taken);
+    double efficiency = baud_rate / cp.baudRate;
+    double a = ((1 / efficiency) - 1) / 2;
 
     (void)signal(SIGALRM, alarmHandler);
     alarmEnabled = false;
@@ -360,14 +330,13 @@ int llclose(int showStatistics)
     {
         while (cp.nRetransmissions != 0 && state != STOP)
         {
-            
-            if(alarmEnabled == false){
+
+            if (alarmEnabled == false)
+            {
                 sendMessage(A_TX, C_DISC);
-            printf("sent C_DISC\n");
-            alarm(1);
-            alarmEnabled = true;
+                alarm(1);
+                alarmEnabled = true;
             }
-            
 
             while (alarmEnabled == true && state != STOP)
             {
@@ -378,16 +347,9 @@ int llclose(int showStatistics)
             alarmEnabled = false;
         }
         if (state != STOP)
-        {
-            printf("timed out\n");
-        }
+            printf("Timed out after %d tries!\n", cp.nRetransmissions);
         else
-        {
-            printf("received C_DISC\n");
             sendMessage(A_RC, C_UA);
-            printf("sent final SET_UA\n");
-            printf("closed\n");
-        }
     }
     else
     {
@@ -399,36 +361,31 @@ int llclose(int showStatistics)
             if (readByteSerialPort(&byte) > 0)
                 state_machine_close(&state, byte);
         }
-        printf("received C_DISK\n");
-
         state = 0;
 
         sendMessage(A_TX, C_DISC);
-        printf("sent C_DISK\n");
-        // printf("NOT sent C_DISC\n");
         while (state != STOP)
         {
             if (readByteSerialPort(&byte) > 0)
-            {
                 state_machine_sendSET(byte, &state, true);
-            }
         }
-        printf("received C_UA\n");
-        printf("closed\n");
     }
 
-    if(showStatistics) {
+    printf("Closed!\n");
+
+    if (showStatistics)
+    {
         printf("Statistics: \n");
-        printf("|- Transfer time: %f\n",time_taken);
+        printf("|- Transfer time: %f\n", time_taken);
         printf("|- Bits sent: %f\n", baud_rate * time_taken);
-        printf("|- Measured Baud-rate: %f\n",baud_rate);
-        printf("|- Measured Baud-rate: %d\n",cp.baudRate);
-        printf("|- FER: %f\n",fer);
-        printf("|- Max frame Size: %ld\n",MAX_PAYLOAD_SIZE);
-        printf("|- Nº bad frames: %f\n",bad_frames);
-        printf("|- Nº good frames: %f\n",good_frames);
-        printf("|- Efficiency: %f\n",efficiency);
-        printf("|- a: %f\n",a);
+        printf("|- Measured Baud-rate: %f\n", baud_rate);
+        printf("|- Measured Baud-rate: %d\n", cp.baudRate);
+        printf("|- FER: %f\n", fer);
+        printf("|- Max frame Size: %d\n", MAX_PAYLOAD_SIZE);
+        printf("|- Nº bad frames: %f\n", bad_frames);
+        printf("|- Nº good frames: %f\n", good_frames);
+        printf("|- Efficiency: %f\n", efficiency);
+        printf("|- a: %f\n", a);
     }
 
     int clstat = closeSerialPort();

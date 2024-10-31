@@ -5,8 +5,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "constants.h"
 #include <limits.h>
+#include <stdbool.h>
+#include "constants.h"
 
 typedef struct
 {
@@ -21,6 +22,18 @@ typedef struct
     size_t payload_length;
     unsigned char packet[MAX_PAYLOAD_SIZE];
 } dataPacket;
+
+void formatScreen(bool connectionOpened, double percentage, bool tx)
+{
+    printf("Opening connection...\n");
+    if (connectionOpened)
+        printf("Connection opened!\n");
+
+    if (tx)
+        printf("%0.0f%% Sent\n", percentage);
+    else
+        printf("%0.0f%% Received\n", percentage);
+}
 
 size_t calculate_file_size(const char *filename)
 {
@@ -61,7 +74,7 @@ size_t build_control_packet(unsigned char *packet, ctrlPacket ctrl_packet_info)
 
     packet[6] = PACKET_CONTROL_FILENAME;
 
-    size_t filename_length = strlen(ctrl_packet_info.file_name);
+    size_t filename_length = strlen((const char *)ctrl_packet_info.file_name);
 
     packet[7] = filename_length;
 
@@ -79,7 +92,7 @@ void application_layer_tx_protocol(const char *filename)
         .file_size = calculate_file_size(filename),
     };
 
-    strcpy(ctrl_packet_info.file_name, filename);
+    strcpy((char *)ctrl_packet_info.file_name, filename);
 
     size_t ctrl_packet_size = build_control_packet(initial_ctrl_packet, ctrl_packet_info);
 
@@ -96,6 +109,8 @@ void application_layer_tx_protocol(const char *filename)
     unsigned char packet[MAX_PAYLOAD_SIZE + 4];
 
     size_t num_bytes_read;
+    double num_bytes_written;
+
     while ((num_bytes_read = fread(data_packet.packet, sizeof(char), MAX_PAYLOAD_SIZE, ptr)) > 0)
     {
         data_packet.sequence_number = sequence_number;
@@ -103,11 +118,21 @@ void application_layer_tx_protocol(const char *filename)
 
         size_t packet_size = build_data_packet(packet, data_packet);
 
+        size_t total_file_size = 0;
+        total_file_size |= initial_ctrl_packet[3];
+        total_file_size |= initial_ctrl_packet[4] << 8;
+        total_file_size |= initial_ctrl_packet[5];
+
         if (llwrite(packet, packet_size) != 0)
         {
             printf("File corrupted. Exiting\n");
             exit(1);
         }
+
+        num_bytes_written += num_bytes_read;
+
+        system("clear");
+        formatScreen(true, num_bytes_written / total_file_size * 100, true);
     }
 
     unsigned char final_ctrl_packet[MAX_PAYLOAD_SIZE];
@@ -132,25 +157,33 @@ void application_layer_rx_protocol(const char *filename)
         exit(1);
     }
 
+    size_t total_file_size = 0;
+    total_file_size |= initial_ctrl_packet[3];
+    total_file_size |= initial_ctrl_packet[4] << 8;
+    total_file_size |= initial_ctrl_packet[5];
+
     FILE *ptr = fopen(filename, "wb+");
 
     dataPacket data_packet;
     unsigned char packet[MAX_PAYLOAD_SIZE];
 
+    double bytes_written = 0;
+
     while (TRUE)
     {
-        llread(&data_packet.packet);
+        llread(data_packet.packet);
 
         if (data_packet.packet[0] != DATA && data_packet.packet[0] == CTRL_FINISH)
-        {
-            printf("Received final control. Ending.\n");
             return;
-        }
 
         data_packet.payload_length = data_packet.packet[2] * 256 + data_packet.packet[3];
 
         memcpy(packet, data_packet.packet + 4, data_packet.payload_length);
         fwrite(packet, 1, data_packet.payload_length, ptr);
+        bytes_written += data_packet.payload_length;
+
+        system("clear");
+        formatScreen(true, bytes_written / total_file_size * 100, false);
     }
 }
 
@@ -171,11 +204,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     llopen(linkLayer);
 
-    if (r == LlTx) {
+    if (r == LlTx)
         application_layer_tx_protocol(filename);
-    }
-    else {
+    else
         application_layer_rx_protocol(filename);
-    }
+
+    printf("Closing...\n");
     llclose(1);
 };
