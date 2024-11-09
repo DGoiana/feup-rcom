@@ -1,0 +1,7 @@
+{
+   "files.associations": {
+      "*.embeddedhtml": "html",
+      "state_machines.h": "c",
+      "receiver.h": "c"
+   }
+}
